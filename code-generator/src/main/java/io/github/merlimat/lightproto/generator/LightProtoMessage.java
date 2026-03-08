@@ -168,7 +168,19 @@ public class LightProtoMessage {
             w.format("            checkRequiredFields();\n");
         }
         w.format("            int _writeIdx = _b.writerIndex();\n");
-        w.format("            _b.ensureWritable(getSerializedSize());\n");
+        w.format("            int _serializedSize = getSerializedSize();\n");
+        w.format("            _b.ensureWritable(_serializedSize);\n");
+        w.format("            Object _base;\n");
+        w.format("            long _addr;\n");
+        w.format("            long _baseOffset;\n");
+        w.format("            if (_b.hasMemoryAddress()) {\n");
+        w.format("                _base = null;\n");
+        w.format("                _baseOffset = _b.memoryAddress();\n");
+        w.format("            } else {\n");
+        w.format("                _base = _b.array();\n");
+        w.format("                _baseOffset = LightProtoCodec.BYTE_ARRAY_BASE_OFFSET + _b.arrayOffset();\n");
+        w.format("            }\n");
+        w.format("            _addr = _baseOffset + _writeIdx;\n");
         for (LightProtoField f : fields) {
 
             if (f.isRequired() || f.isRepeated()) {
@@ -181,7 +193,8 @@ public class LightProtoMessage {
             }
         }
 
-        w.format("            return (_b.writerIndex() - _writeIdx);\n");
+        w.format("            _b.writerIndex(_writeIdx + _serializedSize);\n");
+        w.format("            return _serializedSize;\n");
         w.format("        }\n");
     }
 

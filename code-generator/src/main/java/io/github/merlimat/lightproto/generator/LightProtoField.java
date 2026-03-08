@@ -132,9 +132,9 @@ public abstract class LightProtoField<FieldType extends Field<?>> {
 
     protected String writeTagExpr(String tag) {
         if (field.getNumber() <= 15) {
-            return String.format("_b.writeByte(%s)", tag);
+            return String.format("_addr = LightProtoCodec.writeRawByte(_base, _addr, %s)", tag);
         } else {
-            return String.format("LightProtoCodec.writeVarInt(_b, %s)", tag);
+            return String.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s)", tag);
         }
     }
 

@@ -87,11 +87,20 @@ public class LightProtoStringField extends LightProtoField<Field.String> {
     @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
-        w.format("LightProtoCodec.writeVarInt(_b, _%sBufferLen);\n", ccName);
+        w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sBufferLen);\n", ccName);
         w.format("if (_%sBufferIdx == -1) {\n", ccName);
-        w.format("    LightProtoCodec.writeString(_b, %s, _%sBufferLen);\n", ccName, ccName);
+        w.format("    long _r = LightProtoCodec.writeRawString(_base, _addr, %s, _%sBufferLen);\n", ccName, ccName);
+        w.format("    if (_r >= 0) {\n");
+        w.format("        _addr = _r;\n");
+        w.format("    } else {\n");
+        w.format("        _b.writerIndex((int)(_addr - _baseOffset));\n");
+        w.format("        LightProtoCodec.writeString(_b, %s, _%sBufferLen);\n", ccName, ccName);
+        w.format("        _addr = _baseOffset + _b.writerIndex();\n");
+        w.format("    }\n");
         w.format("} else {\n");
+        w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
         w.format("    _parsedBuffer.getBytes(_%sBufferIdx, _b, _%sBufferLen);\n", ccName, ccName);
+        w.format("    _addr = _baseOffset + _b.writerIndex();\n");
         w.format("}\n");
     }
 

@@ -60,8 +60,13 @@ public class SimpleBenchmark {
 
     byte[] data = new byte[1024];
     Frame frame = new Frame();
-    ByteBuf buffer = PooledByteBufAllocator.DEFAULT.buffer(1024);
-    private final ByteBuf serializeByteBuf = Unpooled.wrappedBuffer(serialized);
+    private final ByteBuf buffer = PooledByteBufAllocator.DEFAULT.buffer(1024);
+    private final ByteBuf serializeByteBuf;
+
+    public SimpleBenchmark() {
+        serializeByteBuf = PooledByteBufAllocator.DEFAULT.buffer(serialized.length);
+        serializeByteBuf.writeBytes(serialized);
+    }
 
     @Benchmark
     public void protobufSerialize(Blackhole bh) throws Exception {

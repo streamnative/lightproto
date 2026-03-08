@@ -20,6 +20,8 @@ import io.github.merlimat.lightproto.tests.AddressBook;
 import io.github.merlimat.lightproto.tests.AddressBookProtos;
 import io.github.merlimat.lightproto.tests.Person;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 import org.openjdk.jmh.annotations.*;
@@ -42,7 +44,8 @@ public class ProtoBenchmark {
         ab = fillLightProto();
         serialized = new byte[ab.getSerializedSize()];
         ab.writeTo(Unpooled.wrappedBuffer(serialized).resetWriterIndex());
-        serializeByteBuf = Unpooled.wrappedBuffer(serialized);
+        serializeByteBuf = PooledByteBufAllocator.DEFAULT.buffer(serialized.length);
+        serializeByteBuf.writeBytes(serialized);
     }
 
     private AddressBook fillLightProto() {

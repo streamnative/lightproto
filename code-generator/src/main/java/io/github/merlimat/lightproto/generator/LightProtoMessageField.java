@@ -73,8 +73,10 @@ public class LightProtoMessageField extends LightProtoField<MessageField> {
     @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
-        w.format("LightProtoCodec.writeVarInt(_b, %s.getSerializedSize());\n", ccName);
+        w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getSerializedSize());\n", ccName);
+        w.format("_b.writerIndex((int)(_addr - _baseOffset));\n");
         w.format("%s.writeTo(_b);\n", ccName);
+        w.format("_addr = _baseOffset + _b.writerIndex();\n");
     }
 
     @Override

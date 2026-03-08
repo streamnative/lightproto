@@ -78,11 +78,20 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
         w.format("    %s;\n", writeTagExpr(tagName()));
-        w.format("    LightProtoCodec.writeVarInt(_b, _sh.len);\n");
+        w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _sh.len);\n");
         w.format("    if (_sh.idx == -1) {\n");
-        w.format("         LightProtoCodec.writeString(_b, _sh.s, _sh.len);\n");
+        w.format("        long _r = LightProtoCodec.writeRawString(_base, _addr, _sh.s, _sh.len);\n");
+        w.format("        if (_r >= 0) {\n");
+        w.format("            _addr = _r;\n");
+        w.format("        } else {\n");
+        w.format("            _b.writerIndex((int)(_addr - _baseOffset));\n");
+        w.format("            LightProtoCodec.writeString(_b, _sh.s, _sh.len);\n");
+        w.format("            _addr = _baseOffset + _b.writerIndex();\n");
+        w.format("        }\n");
         w.format("    } else {\n");
+        w.format("        _b.writerIndex((int)(_addr - _baseOffset));\n");
         w.format("        _parsedBuffer.getBytes(_sh.idx, _b, _sh.len);\n");
+        w.format("        _addr = _baseOffset + _b.writerIndex();\n");
         w.format("    }\n");
         w.format("}\n");
     }

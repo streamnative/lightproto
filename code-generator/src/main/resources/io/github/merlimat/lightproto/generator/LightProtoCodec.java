@@ -23,24 +23,27 @@ import java.nio.charset.StandardCharsets;
 @SuppressWarnings("sunapi")
 class LightProtoCodec {
 
-    // Access String's internal byte[] to avoid intermediate allocation in writeString.
-    // On JDK 9+ compact strings, ASCII strings store data as byte[] with LATIN1 coder.
-    private static final sun.misc.Unsafe UNSAFE;
+    static final sun.misc.Unsafe UNSAFE;
     private static final long STRING_VALUE_OFFSET;
+    static final long BYTE_ARRAY_BASE_OFFSET;
+    static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
 
     static {
         sun.misc.Unsafe unsafe = null;
         long offset = -1;
+        long arrayBase = -1;
         try {
             java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             unsafe = (sun.misc.Unsafe) f.get(null);
             offset = unsafe.objectFieldOffset(String.class.getDeclaredField("value"));
+            arrayBase = unsafe.arrayBaseOffset(byte[].class);
         } catch (Exception e) {
             // Fallback to getBytes path
         }
         UNSAFE = unsafe;
         STRING_VALUE_OFFSET = offset;
+        BYTE_ARRAY_BASE_OFFSET = arrayBase;
     }
 
     static final int TAG_TYPE_MASK = 7;
@@ -317,6 +320,80 @@ class LightProtoCodec {
         } else {
             ByteBufUtil.reserveAndWriteUtf8(b, s, bytesCount);
         }
+    }
+
+    // --- Unsafe raw write methods for zero-overhead serialization ---
+    // These bypass all Netty ByteBuf boundary checks by writing directly to memory.
+    // Used by generated writeTo() methods after a single ensureWritable() call.
+
+    static long writeRawByte(Object base, long addr, int value) {
+        UNSAFE.putByte(base, addr, (byte) value);
+        return addr + 1;
+    }
+
+    static long writeRawVarInt(Object base, long addr, int n) {
+        if (n >= 0) {
+            while (true) {
+                if ((n & ~0x7F) == 0) {
+                    UNSAFE.putByte(base, addr++, (byte) n);
+                    return addr;
+                }
+                UNSAFE.putByte(base, addr++, (byte) ((n & 0x7F) | 0x80));
+                n >>>= 7;
+            }
+        } else {
+            return writeRawVarInt64(base, addr, n);
+        }
+    }
+
+    static long writeRawVarInt64(Object base, long addr, long value) {
+        while (true) {
+            if ((value & ~0x7FL) == 0) {
+                UNSAFE.putByte(base, addr++, (byte) value);
+                return addr;
+            }
+            UNSAFE.putByte(base, addr++, (byte) (((int) value & 0x7F) | 0x80));
+            value >>>= 7;
+        }
+    }
+
+    static long writeRawSignedVarInt(Object base, long addr, int n) {
+        return writeRawVarInt(base, addr, encodeZigZag32(n));
+    }
+
+    static long writeRawSignedVarInt64(Object base, long addr, long n) {
+        return writeRawVarInt64(base, addr, encodeZigZag64(n));
+    }
+
+    static long writeRawLittleEndian32(Object base, long addr, int value) {
+        UNSAFE.putInt(base, addr, LITTLE_ENDIAN ? value : Integer.reverseBytes(value));
+        return addr + 4;
+    }
+
+    static long writeRawLittleEndian64(Object base, long addr, long value) {
+        UNSAFE.putLong(base, addr, LITTLE_ENDIAN ? value : Long.reverseBytes(value));
+        return addr + 8;
+    }
+
+    static long writeRawFloat(Object base, long addr, float n) {
+        return writeRawLittleEndian32(base, addr, Float.floatToRawIntBits(n));
+    }
+
+    static long writeRawDouble(Object base, long addr, double n) {
+        return writeRawLittleEndian64(base, addr, Double.doubleToRawLongBits(n));
+    }
+
+    /**
+     * Write an ASCII string directly via Unsafe. Returns new addr on success,
+     * or -1 if the string is non-ASCII and needs UTF-8 encoding via ByteBuf.
+     */
+    static long writeRawString(Object base, long addr, String s, int bytesCount) {
+        if (s.length() == bytesCount) {
+            byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
+            UNSAFE.copyMemory(value, BYTE_ARRAY_BASE_OFFSET, base, addr, bytesCount);
+            return addr + bytesCount;
+        }
+        return -1;
     }
 
     static String readString(ByteBuf b, int index, int len) {
