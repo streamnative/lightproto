@@ -40,7 +40,7 @@ public class LightProtoStringField extends LightProtoField {
     public void setter(PrintWriter w, String enclosingType) {
         w.format("public %s %s(%s %s) {\n", enclosingType, Util.camelCase("set", field.getName()), field.getJavaType(), camelCase(field.getName()));
         w.format("    this.%s = %s;\n", camelCase(field.getName()), camelCase(field.getName()));
-        w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
+        writeSetPresence(w);
         w.format("    _%sBufferIdx = -1;\n", ccName);
         w.format("    _%sBufferLen = LightProtoCodec.computeStringUTF8Size(%s);\n", ccName, ccName);
         w.format("    _cachedSize = -1;\n");

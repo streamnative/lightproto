@@ -15,20 +15,20 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import java.io.PrintWriter;
+public class ProtoOneofDescriptor {
+    private final String name;
+    private final int index;
 
-public class LightProtoEnumField extends LightProtoNumberField {
-
-    public LightProtoEnumField(ProtoFieldDescriptor field, int index) {
-        super(field, index);
+    public ProtoOneofDescriptor(String name, int index) {
+        this.name = name;
+        this.index = index;
     }
 
-    @Override
-    public void parse(PrintWriter w) {
-        w.format("%s _%s = %s;\n", field.getJavaType(), ccName, parseNumber(field));
-        w.format("if (_%s != null) {\n", ccName);
-        writeSetPresence(w);
-        w.format("    %s = _%s;\n", ccName, ccName);
-        w.format("}\n");
+    public String getName() {
+        return name;
+    }
+
+    public int getIndex() {
+        return index;
     }
 }

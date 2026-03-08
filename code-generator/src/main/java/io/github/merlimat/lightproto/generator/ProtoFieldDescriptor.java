@@ -50,11 +50,22 @@ public class ProtoFieldDescriptor {
     private final String defaultValue;        // Raw default value (e.g. "hello" for strings, null for no-default)
     private final String defaultValueAsString; // Default value as code literal (e.g. "5" for int, "true" for bool)
     private final List<String> docs;
+    private final int oneofIndex;    // Index into message's oneof list, or -1 if not in a oneof
+    private final String oneofName;  // Name of the containing oneof, or null
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
                                 boolean defaultValueSet, String defaultValue,
                                 String defaultValueAsString, List<String> docs) {
+        this(name, number, protoType, javaType, label, packed,
+                defaultValueSet, defaultValue, defaultValueAsString, docs, -1, null);
+    }
+
+    public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
+                                Label label, boolean packed,
+                                boolean defaultValueSet, String defaultValue,
+                                String defaultValueAsString, List<String> docs,
+                                int oneofIndex, String oneofName) {
         this.name = name;
         this.number = number;
         this.protoType = protoType;
@@ -65,6 +76,8 @@ public class ProtoFieldDescriptor {
         this.defaultValue = defaultValue;
         this.defaultValueAsString = defaultValueAsString;
         this.docs = docs != null ? docs : Collections.emptyList();
+        this.oneofIndex = oneofIndex;
+        this.oneofName = oneofName;
     }
 
     public String getName() {
@@ -145,5 +158,17 @@ public class ProtoFieldDescriptor {
 
     public List<String> getDocs() {
         return docs;
+    }
+
+    public int getOneofIndex() {
+        return oneofIndex;
+    }
+
+    public String getOneofName() {
+        return oneofName;
+    }
+
+    public boolean isOneofMember() {
+        return oneofIndex >= 0;
     }
 }

@@ -85,14 +85,18 @@ public abstract class LightProtoField {
         w.format("        private static final int %s = %d;\n", fieldNumber(), field.getNumber());
         w.format("        private static final int %s = (%s << LightProtoCodec.TAG_TYPE_BITS) | %s;\n", tagName(), fieldNumber(), typeTag());
         w.format("        private static final int %s_SIZE = LightProtoCodec.computeVarIntSize(%s);\n", tagName(), tagName());
-        if (!field.isRepeated()) {
+        if (!field.isRepeated() && !field.isOneofMember()) {
             w.format("        private static final int %s = 1 << (%d %% 32);\n", fieldMask(), index);
         }
     }
 
     public void has(PrintWriter w) {
         w.format("        public boolean %s() {\n", Util.camelCase("has", field.getName()));
-        w.format("            return (_bitField%d & %s) != 0;\n", bitFieldIndex(), fieldMask());
+        if (field.isOneofMember()) {
+            w.format("            return _%sCase == %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
+        } else {
+            w.format("            return (_bitField%d & %s) != 0;\n", bitFieldIndex(), fieldMask());
+        }
         w.format("        }\n");
     }
 
@@ -100,8 +104,15 @@ public abstract class LightProtoField {
 
     public void fieldClear(PrintWriter w, String enclosingType) {
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));
-        w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
-        clear(w);
+        if (field.isOneofMember()) {
+            w.format("            if (_%sCase == %s) {\n", Util.camelCase(field.getOneofName()), fieldNumber());
+            w.format("                _%sCase = 0;\n", Util.camelCase(field.getOneofName()));
+            clear(w);
+            w.format("            }\n");
+        } else {
+            w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
+            clear(w);
+        }
         w.format("            return this;\n");
         w.format("        }\n");
     }
@@ -149,5 +160,21 @@ public abstract class LightProtoField {
 
     protected int bitFieldIndex() {
         return index / 32;
+    }
+
+    protected void writeSetPresence(PrintWriter w) {
+        if (field.isOneofMember()) {
+            w.format("    _%sCase = %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
+        } else {
+            w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
+        }
+    }
+
+    public boolean isOneofMember() {
+        return field.isOneofMember();
+    }
+
+    public String oneofCaseFieldName() {
+        return "_" + Util.camelCase(field.getOneofName()) + "Case";
     }
 }

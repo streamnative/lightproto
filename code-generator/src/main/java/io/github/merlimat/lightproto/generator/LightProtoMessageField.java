@@ -34,7 +34,7 @@ public class LightProtoMessageField extends LightProtoField {
         w.format("    if (%s == null) {\n", ccName);
         w.format("        %s = new %s();\n", ccName, field.getJavaType());
         w.format("    }\n");
-        w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
+        writeSetPresence(w);
         w.format("    _cachedSize = -1;\n");
         w.format("    return %s;\n", ccName);
         w.format("}\n");

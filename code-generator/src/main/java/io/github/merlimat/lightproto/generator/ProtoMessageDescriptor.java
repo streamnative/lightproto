@@ -15,6 +15,7 @@
  */
 package io.github.merlimat.lightproto.generator;
 
+import java.util.Collections;
 import java.util.List;
 
 public class ProtoMessageDescriptor {
@@ -22,15 +23,25 @@ public class ProtoMessageDescriptor {
     private final List<ProtoFieldDescriptor> fields;
     private final List<ProtoMessageDescriptor> nestedMessages;
     private final List<ProtoEnumDescriptor> nestedEnums;
+    private final List<ProtoOneofDescriptor> oneofs;
 
     public ProtoMessageDescriptor(String name,
                                   List<ProtoFieldDescriptor> fields,
                                   List<ProtoMessageDescriptor> nestedMessages,
                                   List<ProtoEnumDescriptor> nestedEnums) {
+        this(name, fields, nestedMessages, nestedEnums, Collections.emptyList());
+    }
+
+    public ProtoMessageDescriptor(String name,
+                                  List<ProtoFieldDescriptor> fields,
+                                  List<ProtoMessageDescriptor> nestedMessages,
+                                  List<ProtoEnumDescriptor> nestedEnums,
+                                  List<ProtoOneofDescriptor> oneofs) {
         this.name = name;
         this.fields = fields;
         this.nestedMessages = nestedMessages;
         this.nestedEnums = nestedEnums;
+        this.oneofs = oneofs;
     }
 
     public String getName() {
@@ -51,5 +62,9 @@ public class ProtoMessageDescriptor {
 
     public List<ProtoEnumDescriptor> getNestedEnumGroups() {
         return nestedEnums;
+    }
+
+    public List<ProtoOneofDescriptor> getOneofs() {
+        return oneofs;
     }
 }

@@ -20,6 +20,7 @@ import com.google.protobuf.DescriptorProtos.EnumDescriptorProto;
 import com.google.protobuf.DescriptorProtos.EnumValueDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FieldDescriptorProto;
 import com.google.protobuf.DescriptorProtos.FileDescriptorProto;
+import com.google.protobuf.DescriptorProtos.OneofDescriptorProto;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,14 +104,22 @@ public class DescriptorConverter {
                 .map(DescriptorConverter::convertMessage)
                 .collect(Collectors.toList());
 
+        // Build oneof descriptors
+        List<ProtoOneofDescriptor> oneofs = new ArrayList<>();
+        for (int i = 0; i < messageProto.getOneofDeclCount(); i++) {
+            OneofDescriptorProto oneofProto = messageProto.getOneofDecl(i);
+            oneofs.add(new ProtoOneofDescriptor(oneofProto.getName(), i));
+        }
+
         List<ProtoFieldDescriptor> fields = messageProto.getFieldList().stream()
-                .map(DescriptorConverter::convertField)
+                .map(f -> convertField(f, oneofs))
                 .collect(Collectors.toList());
 
-        return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums);
+        return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums, oneofs);
     }
 
-    private static ProtoFieldDescriptor convertField(FieldDescriptorProto fieldProto) {
+    private static ProtoFieldDescriptor convertField(FieldDescriptorProto fieldProto,
+                                                        List<ProtoOneofDescriptor> oneofs) {
         String name = fieldProto.getName();
         int number = fieldProto.getNumber();
 
@@ -172,8 +181,18 @@ public class DescriptorConverter {
         // No docs available from binary descriptor sets
         List<String> docs = Collections.emptyList();
 
+        // Oneof membership
+        int oneofIndex = -1;
+        String oneofName = null;
+        if (fieldProto.hasOneofIndex()) {
+            oneofIndex = fieldProto.getOneofIndex();
+            if (oneofIndex >= 0 && oneofIndex < oneofs.size()) {
+                oneofName = oneofs.get(oneofIndex).getName();
+            }
+        }
+
         return new ProtoFieldDescriptor(name, number, protoType, javaType, label, packed,
-                defaultValueSet, defaultValue, defaultValueAsString, docs);
+                defaultValueSet, defaultValue, defaultValueAsString, docs, oneofIndex, oneofName);
     }
 
     private static ProtoEnumDescriptor convertEnum(EnumDescriptorProto enumProto) {

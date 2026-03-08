@@ -51,7 +51,7 @@ public class LightProtoBytesField extends LightProtoField {
 
         w.format("public %s %s(io.netty.buffer.ByteBuf %s) {\n", enclosingType, Util.camelCase("set", ccName), ccName);
         w.format("    this.%s = %s;\n", ccName, ccName);
-        w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
+        writeSetPresence(w);
         w.format("    _%sIdx = -1;\n", ccName);
         w.format("    _%sLen = %s.readableBytes();\n", ccName, ccName);
         w.format("    _cachedSize = -1;\n");

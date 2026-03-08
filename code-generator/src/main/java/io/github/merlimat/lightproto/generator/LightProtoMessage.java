@@ -17,7 +17,9 @@ package io.github.merlimat.lightproto.generator;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class LightProtoMessage {
@@ -27,16 +29,26 @@ public class LightProtoMessage {
     private final List<LightProtoEnum> enums;
     private final List<LightProtoField> fields;
     private final List<LightProtoMessage> nestedMessages;
+    private final List<ProtoOneofDescriptor> oneofs;
+    private final Map<Integer, List<LightProtoField>> oneofFields;
 
     public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested) {
         this.message = message;
         this.isNested = isNested;
         this.enums = message.getNestedEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
         this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true)).collect(Collectors.toList());
+        this.oneofs = message.getOneofs();
 
         this.fields = new ArrayList<>();
         for (int i = 0; i < message.getFields().size(); i++) {
             fields.add(LightProtoField.create(message.getFields().get(i), i));
+        }
+
+        this.oneofFields = new HashMap<>();
+        for (LightProtoField f : fields) {
+            if (f.isOneofMember()) {
+                oneofFields.computeIfAbsent(f.field.getOneofIndex(), k -> new ArrayList<>()).add(f);
+            }
         }
     }
 
@@ -61,6 +73,7 @@ public class LightProtoMessage {
         });
 
         generateBitFields(w);
+        generateOneofFields(w);
         generateSerialize(w);
         generateGetSerializedSize(w);
         generateParseFrom(w);
@@ -98,7 +111,12 @@ public class LightProtoMessage {
         for (LightProtoField field : fields) {
             w.format("                case %s:\n", field.tagName());
             if (!field.isRepeated() && !field.isEnum()) {
-                w.format("                    _bitField%d |= %s;\n", field.bitFieldIndex(), field.fieldMask());
+                if (field.isOneofMember()) {
+                    w.format("                    _%sCase = %s;\n",
+                            Util.camelCase(field.field.getOneofName()), field.fieldNumber());
+                } else {
+                    w.format("                    _bitField%d |= %s;\n", field.bitFieldIndex(), field.fieldMask());
+                }
             }
             field.parse(w);
             w.format("                    break;\n");
@@ -137,6 +155,9 @@ public class LightProtoMessage {
         w.format("            _cachedSize = -1;\n");
         for (int i = 0; i < bitFieldsCount(); i++) {
             w.format("            _bitField%d = 0;\n", i);
+        }
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            w.format("            _%sCase = 0;\n", Util.camelCase(oneof.getName()));
         }
 
         w.format("            return this;\n");
@@ -271,5 +292,49 @@ public class LightProtoMessage {
         }
 
         return false;
+    }
+
+    private void generateOneofFields(PrintWriter w) {
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            String ccOneofName = Util.camelCase(oneof.getName());
+            String ucOneofName = Util.camelCaseFirstUpper(oneof.getName());
+            List<LightProtoField> members = oneofFields.getOrDefault(oneof.getIndex(), List.of());
+
+            // Case tracking field
+            w.format("private int _%sCase = 0;\n", ccOneofName);
+
+            // Case enum
+            w.format("public enum %sCase {\n", ucOneofName);
+            for (LightProtoField f : members) {
+                String enumConstant = Util.upperCase(Util.camelCase(f.field.getName()));
+                w.format("    %s(%d),\n", enumConstant, f.field.getNumber());
+            }
+            w.format("    NOT_SET(0);\n");
+            w.format("    private final int value;\n");
+            w.format("    %sCase(int value) { this.value = value; }\n", ucOneofName);
+            w.format("    public int getValue() { return value; }\n");
+            w.format("}\n");
+
+            // getXxxCase() getter
+            w.format("public %sCase %s() {\n", ucOneofName, Util.camelCase("get", oneof.getName(), "case"));
+            w.format("    switch (_%sCase) {\n", ccOneofName);
+            for (LightProtoField f : members) {
+                String enumConstant = Util.upperCase(Util.camelCase(f.field.getName()));
+                w.format("        case %d: return %sCase.%s;\n", f.field.getNumber(), ucOneofName, enumConstant);
+            }
+            w.format("        default: return %sCase.NOT_SET;\n", ucOneofName);
+            w.format("    }\n");
+            w.format("}\n");
+
+            // clearXxx() method for the oneof group
+            w.format("public %s %s() {\n", message.getName(), Util.camelCase("clear", oneof.getName()));
+            for (LightProtoField f : members) {
+                f.clear(w);
+            }
+            w.format("    _%sCase = 0;\n", ccOneofName);
+            w.format("    _cachedSize = -1;\n");
+            w.format("    return this;\n");
+            w.format("}\n");
+        }
     }
 }

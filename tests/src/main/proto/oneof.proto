@@ -1,5 +1,5 @@
 /**
- * Copyright 2026 StreamNative
+ * Copyright 2020 Splunk Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,22 +13,30 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.github.merlimat.lightproto.generator;
+syntax = "proto2";
+package io.github.merlimat.lightproto.tests;
 
-import java.io.PrintWriter;
+option java_outer_classname = "OneofProtos";
 
-public class LightProtoEnumField extends LightProtoNumberField {
+message SubMessage {
+    optional int32 value = 1;
+    optional string label = 2;
+}
 
-    public LightProtoEnumField(ProtoFieldDescriptor field, int index) {
-        super(field, index);
+message OneofMsg {
+    optional string name = 1;
+
+    oneof test_oneof {
+        int32 oneof_int = 10;
+        string oneof_string = 11;
+        bool oneof_bool = 12;
+        SubMessage oneof_msg = 13;
     }
 
-    @Override
-    public void parse(PrintWriter w) {
-        w.format("%s _%s = %s;\n", field.getJavaType(), ccName, parseNumber(field));
-        w.format("if (_%s != null) {\n", ccName);
-        writeSetPresence(w);
-        w.format("    %s = _%s;\n", ccName, ccName);
-        w.format("}\n");
+    oneof second_oneof {
+        double oneof_double = 20;
+        bytes oneof_bytes = 21;
     }
+
+    optional int32 after_field = 30;
 }
