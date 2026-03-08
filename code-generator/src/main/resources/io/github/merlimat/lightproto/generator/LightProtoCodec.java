@@ -20,7 +20,29 @@ import io.netty.buffer.ByteBufUtil;
 
 import java.nio.charset.StandardCharsets;
 
+@SuppressWarnings("sunapi")
 class LightProtoCodec {
+
+    // Access String's internal byte[] to avoid intermediate allocation in writeString.
+    // On JDK 9+ compact strings, ASCII strings store data as byte[] with LATIN1 coder.
+    private static final sun.misc.Unsafe UNSAFE;
+    private static final long STRING_VALUE_OFFSET;
+
+    static {
+        sun.misc.Unsafe unsafe = null;
+        long offset = -1;
+        try {
+            java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            f.setAccessible(true);
+            unsafe = (sun.misc.Unsafe) f.get(null);
+            offset = unsafe.objectFieldOffset(String.class.getDeclaredField("value"));
+        } catch (Exception e) {
+            // Fallback to getBytes path
+        }
+        UNSAFE = unsafe;
+        STRING_VALUE_OFFSET = offset;
+    }
+
     static final int TAG_TYPE_MASK = 7;
     static final int TAG_TYPE_BITS = 3;
     static final int WIRETYPE_VARINT = 0;
@@ -281,7 +303,20 @@ class LightProtoCodec {
     }
 
     static void writeString(ByteBuf b, String s, int bytesCount) {
-        ByteBufUtil.reserveAndWriteUtf8(b, s, bytesCount);
+        if (s.length() == bytesCount) {
+            // ASCII fast path: read String's internal byte[] directly via Unsafe,
+            // then writeBytes in a single copy with zero intermediate allocation.
+            // On JDK 9+ compact strings, ASCII strings use LATIN1 coder and the
+            // internal value byte[] contains exactly the bytes we need.
+            if (UNSAFE != null) {
+                byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
+                b.writeBytes(value, 0, bytesCount);
+            } else {
+                b.writeBytes(s.getBytes(StandardCharsets.ISO_8859_1));
+            }
+        } else {
+            ByteBufUtil.reserveAndWriteUtf8(b, s, bytesCount);
+        }
     }
 
     static String readString(ByteBuf b, int index, int len) {
