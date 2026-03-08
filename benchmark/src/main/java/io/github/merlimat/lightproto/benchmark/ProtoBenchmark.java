@@ -34,10 +34,18 @@ import java.util.concurrent.TimeUnit;
 @Fork(value = 1)
 public class ProtoBenchmark {
 
-    final static byte[] serialized;
+    private final byte[] serialized;
 
-    static {
-        AddressBook ab = new AddressBook();
+    private AddressBook ab = new AddressBook();
+
+    public ProtoBenchmark() {
+        ab = fillLightProto();
+        serialized = new byte[ab.getSerializedSize()];
+        ab.writeTo(Unpooled.wrappedBuffer(serialized).resetWriterIndex());
+        serializeByteBuf = Unpooled.wrappedBuffer(serialized);
+    }
+
+    private AddressBook fillLightProto() {
         Person p1 = ab.addPerson();
         p1.setName("name");
         p1.setEmail("name@example.com");
@@ -58,19 +66,14 @@ public class ProtoBenchmark {
         Person.PhoneNumber p2_pn1 = p2.addPhone();
         p2_pn1.setNumber("xxx-zzz-yyyyy");
         p2_pn1.setType(Person.PhoneType.HOME);
-
-        serialized = new byte[ab.getSerializedSize()];
-        ab.writeTo(Unpooled.wrappedBuffer(serialized).resetWriterIndex());
+        return ab;
     }
-
-    private final AddressBook frame = new AddressBook();
 
     private final ByteBuf buffer = PooledByteBufAllocator.DEFAULT.buffer(1024);
     byte[] data = new byte[1024];
-    private final ByteBuf serializeByteBuf = Unpooled.wrappedBuffer(serialized);
+    private final ByteBuf serializeByteBuf;
 
-    @Benchmark
-    public void protobufSerialize(Blackhole bh) throws Exception {
+    private static AddressBookProtos.AddressBook _protobufPrepare() {
         AddressBookProtos.AddressBook.Builder pbab = AddressBookProtos.AddressBook.newBuilder();
         AddressBookProtos.Person.Builder pb_p1 = AddressBookProtos.Person.newBuilder();
         pb_p1.setName("name 1");
@@ -101,42 +104,45 @@ public class ProtoBenchmark {
         pbab.addPerson(pb_p1);
         pbab.addPerson(pb_p2);
 
-        CodedOutputStream s = CodedOutputStream.newInstance(data);
-        pbab.build().writeTo(s);
+        return pbab.build();
+    }
 
-        bh.consume(pbab);
+    private static final AddressBookProtos.AddressBook filledProtobuf = _protobufPrepare();
+
+    @Benchmark
+    public void protobufSerialize(Blackhole bh) throws Exception {
+        CodedOutputStream s = CodedOutputStream.newInstance(data);
+        filledProtobuf.writeTo(s);
         bh.consume(s);
     }
 
     @Benchmark
+    public void protobufFillAndSerialize(Blackhole bh) throws Exception {
+        AddressBookProtos.AddressBook ab = _protobufPrepare();
+        CodedOutputStream s = CodedOutputStream.newInstance(data);
+        ab.writeTo(s);
+        bh.consume(s);
+    }
+
+    @Benchmark
+    public void lightProtoFillAndSerialize(Blackhole bh) {
+        ab.clear();
+        ab = fillLightProto();
+
+        ab.writeTo(buffer);
+
+        bh.consume(ab);
+        bh.consume(buffer);
+        buffer.clear();
+    }
+
+    @Benchmark
     public void lightProtoSerialize(Blackhole bh) {
-        frame.clear();
-
-        Person p1 = frame.addPerson();
-        p1.setName("name");
-        p1.setEmail("name@example.com");
-        p1.setId(5);
-        Person.PhoneNumber p1_pn1 = p1.addPhone();
-        p1_pn1.setNumber("xxx-zzz-yyyyy");
-        p1_pn1.setType(Person.PhoneType.HOME);
-
-        Person.PhoneNumber p1_pn2 = p1.addPhone();
-        p1_pn2.setNumber("xxx-zzz-yyyyy");
-        p1_pn2.setType(Person.PhoneType.MOBILE);
-
-        Person p2 = frame.addPerson();
-        p2.setName("name 2");
-        p2.setEmail("name2@example.com");
-        p2.setId(6);
-
-        Person.PhoneNumber p2_pn1 = p1.addPhone();
-        p2_pn1.setNumber("xxx-zzz-yyyyy");
-        p2_pn1.setType(Person.PhoneType.HOME);
-
-        frame.writeTo(buffer);
+        ab.writeTo(buffer);
         buffer.clear();
 
-        bh.consume(frame);
+        bh.consume(buffer);
+        bh.consume(ab);
     }
 
     @Benchmark
@@ -147,10 +153,9 @@ public class ProtoBenchmark {
 
     @Benchmark
     public void lightProtoDeserialize(Blackhole bh) {
-        frame.parseFrom(serializeByteBuf, serializeByteBuf.readableBytes());
+        ab.parseFrom(serializeByteBuf, serializeByteBuf.readableBytes());
         serializeByteBuf.resetReaderIndex();
-        bh.consume(frame);
+        bh.consume(ab);
     }
-
 
 }

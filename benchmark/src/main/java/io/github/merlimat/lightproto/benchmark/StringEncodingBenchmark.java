@@ -15,6 +15,7 @@
  */
 package io.github.merlimat.lightproto.benchmark;
 
+import io.netty.util.AsciiString;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
@@ -34,12 +35,14 @@ import io.netty.buffer.ByteBufUtil;
 @State(Scope.Benchmark)
 @Warmup(iterations = 3)
 @OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Measurement(iterations = 10)
+@Measurement(iterations = 3)
 @Fork(value = 1)
 public class StringEncodingBenchmark {
 
     private static final String testString = "UTF16 Ελληνικά Русский 日本語";
     private static final String testStringAscii = "Neque porro quisquam est qui dolorem ipsum";
+
+    private static final AsciiString nettyAsciiString = new AsciiString(testStringAscii.getBytes());
 
     @Benchmark
     public void jdkEncoding(Blackhole bh) {
@@ -66,6 +69,38 @@ public class StringEncodingBenchmark {
     public void nettyEncodingAscii(Blackhole bh) {
         buffer.clear();
         ByteBufUtil.writeUtf8(buffer, testStringAscii);
+        bh.consume(buffer);
+    }
+
+    @Benchmark
+    public void nettyEncodingAsciiString(Blackhole bh) {
+        buffer.clear();
+        ByteBufUtil.writeAscii(buffer, nettyAsciiString);
+        bh.consume(buffer);
+    }
+
+    @Benchmark
+    public void asciiDetectAndWriteBytes(Blackhole bh) {
+        buffer.clear();
+        int bytesCount = ByteBufUtil.utf8Bytes(testStringAscii);
+        if (testStringAscii.length() == bytesCount) {
+            // ASCII fast path
+            buffer.writeBytes(testStringAscii.getBytes(StandardCharsets.ISO_8859_1));
+        } else {
+            ByteBufUtil.reserveAndWriteUtf8(buffer, testStringAscii, bytesCount);
+        }
+        bh.consume(buffer);
+    }
+
+    @Benchmark
+    public void asciiDetectAndWriteBytesUtf8(Blackhole bh) {
+        buffer.clear();
+        int bytesCount = ByteBufUtil.utf8Bytes(testString);
+        if (testString.length() == bytesCount) {
+            buffer.writeBytes(testString.getBytes(StandardCharsets.ISO_8859_1));
+        } else {
+            ByteBufUtil.reserveAndWriteUtf8(buffer, testString, bytesCount);
+        }
         bh.consume(buffer);
     }
 }
