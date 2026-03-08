@@ -15,13 +15,11 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.MessageField;
-
 import java.io.PrintWriter;
 
-public class LightProtoMessageField extends LightProtoField<MessageField> {
+public class LightProtoMessageField extends LightProtoField {
 
-    public LightProtoMessageField(MessageField field, int index) {
+    public LightProtoMessageField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 

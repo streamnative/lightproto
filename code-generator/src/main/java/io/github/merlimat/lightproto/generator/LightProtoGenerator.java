@@ -16,9 +16,6 @@
 package io.github.merlimat.lightproto.generator;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Splitter;
-import io.protostuff.parser.Proto;
-import io.protostuff.parser.ProtoUtil;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import org.slf4j.Logger;
@@ -32,16 +29,19 @@ import java.util.*;
 
 public class LightProtoGenerator {
 
-    public static List<File> generate(List<File> inputs, File outputDirectory,
-                                      String classPrefix, boolean useOuterClass) throws Exception {
+    public static List<File> generate(List<ProtoFileDescriptor> descriptors, File outputDirectory,
+                                      String classPrefix, boolean useOuterClass,
+                                      List<String> fileNames) throws Exception {
         List<File> generatedFiles = new ArrayList<>();
         Set<String> javaPackages = new HashSet<>();
 
-        for (File input : inputs) {
-            Proto proto = new Proto();
-            ProtoUtil.loadFrom(input, proto);
+        for (int i = 0; i < descriptors.size(); i++) {
+            ProtoFileDescriptor proto = descriptors.get(i);
+            String fileName = fileNames.get(i);
 
-            String fileWithoutExtension = Splitter.on(".").splitToList(input.getName()).get(0);
+            String fileWithoutExtension = fileName.contains(".")
+                    ? fileName.substring(0, fileName.lastIndexOf('.'))
+                    : fileName;
             String outerClassName = Util.camelCaseFirstUpper(classPrefix, fileWithoutExtension);
 
             String javaPackageName = proto.getJavaPackageName();

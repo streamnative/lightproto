@@ -15,15 +15,13 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
 import static io.github.merlimat.lightproto.generator.Util.camelCase;
 
-public class LightProtoStringField extends LightProtoField<Field.String> {
+public class LightProtoStringField extends LightProtoField {
 
-    public LightProtoStringField(Field.String field, int index) {
+    public LightProtoStringField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 

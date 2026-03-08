@@ -15,8 +15,6 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Message;
-
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,13 +22,13 @@ import java.util.stream.Collectors;
 
 public class LightProtoMessage {
 
-    private final Message message;
+    private final ProtoMessageDescriptor message;
     private final boolean isNested;
     private final List<LightProtoEnum> enums;
     private final List<LightProtoField> fields;
     private final List<LightProtoMessage> nestedMessages;
 
-    public LightProtoMessage(Message message, boolean isNested) {
+    public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested) {
         this.message = message;
         this.isNested = isNested;
         this.enums = message.getNestedEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());

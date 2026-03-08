@@ -15,13 +15,11 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
 public class LightProtoEnumField extends LightProtoNumberField {
 
-    public LightProtoEnumField(Field<?> field, int index) {
+    public LightProtoEnumField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 

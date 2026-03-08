@@ -15,16 +15,14 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
-public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated<Field.Bytes> {
+public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
 
     protected final String pluralName;
     protected final String singularName;
 
-    public LightProtoRepeatedBytesField(Field.Bytes field, int index) {
+    public LightProtoRepeatedBytesField(ProtoFieldDescriptor field, int index) {
         super(field, index);
         this.pluralName = Util.plural(ccName);
         this.singularName = Util.singular(ccName);

@@ -15,16 +15,14 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.MessageField;
-
 import java.io.PrintWriter;
 
-public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated<MessageField> {
+public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
 
     protected final String pluralName;
     protected final String singularName;
 
-    public LightProtoRepeatedMessageField(MessageField field, int index) {
+    public LightProtoRepeatedMessageField(ProtoFieldDescriptor field, int index) {
         super(field, index);
         this.pluralName = Util.plural(ccName);
         this.singularName = Util.singular(ccName);

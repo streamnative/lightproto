@@ -15,13 +15,11 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
 public class LightProtoBooleanField extends LightProtoNumberField {
 
-    public LightProtoBooleanField(Field<?> field, int index) {
+    public LightProtoBooleanField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 

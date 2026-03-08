@@ -16,14 +16,13 @@
 package io.github.merlimat.lightproto.generator;
 
 import com.google.common.collect.Maps;
-import io.protostuff.parser.Field;
 
 import java.io.PrintWriter;
 import java.util.Map;
 
 import static io.github.merlimat.lightproto.generator.Util.camelCase;
 
-public class LightProtoNumberField extends LightProtoField<Field<?>> {
+public class LightProtoNumberField extends LightProtoField {
 
 
     private static final Map<String, String> typeToTag = Maps.newHashMap();
@@ -44,11 +43,11 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         typeToTag.put("sfixed64", "LightProtoCodec.WIRETYPE_FIXED64");
     }
 
-    public LightProtoNumberField(Field<?> field, int index) {
+    public LightProtoNumberField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 
-    static void serializeNumber(PrintWriter w, Field<?> field, String name) {
+    static void serializeNumber(PrintWriter w, ProtoFieldDescriptor field, String name) {
         if (field.isEnumField()) {
             w.format("                _addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getValue());\n", name);
         } else if (field.getProtoType().equals("bool")) {
@@ -82,7 +81,7 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
-    static String parseNumber(Field<?> field) {
+    static String parseNumber(ProtoFieldDescriptor field) {
         if (field.isEnumField()) {
             return String.format("%s.valueOf(LightProtoCodec.readVarInt(_buffer))", field.getJavaType());
         } else if (field.getProtoType().equals("bool")) {
@@ -116,7 +115,7 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
-    static String serializedSizeOfNumber(Field<?> field, String name) {
+    static String serializedSizeOfNumber(ProtoFieldDescriptor field, String name) {
         if (field.isEnumField()) {
             return String.format("LightProtoCodec.computeVarIntSize(%s.getValue())", name);
         } else if (field.getProtoType().equals("sint32")) {
@@ -150,7 +149,7 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
-    static String typeTag(Field<?> field) {
+    static String typeTag(ProtoFieldDescriptor field) {
         if (field.isEnumField()) {
             return "LightProtoCodec.WIRETYPE_VARINT";
         } else {
@@ -220,7 +219,7 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
         }
     }
 
-    static int fixedDataSize(Field<?> field) {
+    static int fixedDataSize(ProtoFieldDescriptor field) {
         String type = field.getProtoType();
         if (type.equals("fixed32") || type.equals("sfixed32") || type.equals("float")) {
             return 4;

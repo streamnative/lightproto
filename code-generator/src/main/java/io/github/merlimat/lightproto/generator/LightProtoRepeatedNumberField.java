@@ -15,16 +15,14 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
-public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Field<?>> {
+public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
 
     protected final String pluralName;
     protected final String singularName;
 
-    public LightProtoRepeatedNumberField(Field<?> field, int index) {
+    public LightProtoRepeatedNumberField(ProtoFieldDescriptor field, int index) {
         super(field, index);
         this.pluralName = Util.plural(ccName);
         this.singularName = Util.singular(ccName);
@@ -75,7 +73,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
     @Override
     public void serialize(PrintWriter w) {
         int fixedSize = LightProtoNumberField.fixedDataSize(field);
-        if (field.getOption("packed") == Boolean.TRUE) {
+        if (field.isPacked()) {
             w.format("    %s;\n", writeTagExpr(tagName() + "_PACKED"));
             if (fixedSize >= 0) {
                 w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sCount * %d);\n", pluralName, fixedSize);
@@ -125,7 +123,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
     public void serializedSize(PrintWriter w) {
 
         int fixedSize = LightProtoNumberField.fixedDataSize(field);
-        if (field.getOption("packed") == Boolean.TRUE) {
+        if (field.isPacked()) {
             if (fixedSize >= 0) {
                 w.format("    int _%sSize = _%sCount * %d;\n", pluralName, pluralName, fixedSize);
             } else {

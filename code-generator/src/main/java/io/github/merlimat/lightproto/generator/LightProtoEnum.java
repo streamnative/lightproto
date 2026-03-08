@@ -15,14 +15,12 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.EnumGroup;
-
 import java.io.PrintWriter;
 
 public class LightProtoEnum {
-    private final EnumGroup eg;
+    private final ProtoEnumDescriptor eg;
 
-    public LightProtoEnum(EnumGroup eg) {
+    public LightProtoEnum(ProtoEnumDescriptor eg) {
         this.eg = eg;
     }
 

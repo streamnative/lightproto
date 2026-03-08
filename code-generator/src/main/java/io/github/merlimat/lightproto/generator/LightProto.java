@@ -15,7 +15,6 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Proto;
 import org.jboss.forge.roaster.Roaster;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,13 +29,13 @@ import java.util.stream.Collectors;
 public class LightProto {
 
     private static final Logger log = LoggerFactory.getLogger(LightProto.class);
-    private final Proto proto;
+    private final ProtoFileDescriptor proto;
     private final String outerClassName;
     private final boolean useOuterClass;
     private final List<LightProtoEnum> enums;
     private final List<LightProtoMessage> messages;
 
-    public LightProto(Proto proto, String outerClassName, boolean useOuterClass) {
+    public LightProto(ProtoFileDescriptor proto, String outerClassName, boolean useOuterClass) {
         this.proto = proto;
         this.outerClassName = outerClassName;
         this.useOuterClass = useOuterClass;

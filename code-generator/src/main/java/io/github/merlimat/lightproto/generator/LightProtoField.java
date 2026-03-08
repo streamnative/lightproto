@@ -15,42 +15,39 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-import io.protostuff.parser.MessageField;
-
 import java.io.PrintWriter;
 
-public abstract class LightProtoField<FieldType extends Field<?>> {
+public abstract class LightProtoField {
 
-    protected final FieldType field;
+    protected final ProtoFieldDescriptor field;
     protected final int index;
     protected final String ccName;
 
-    protected LightProtoField(FieldType field, int index) {
+    protected LightProtoField(ProtoFieldDescriptor field, int index) {
         this.field = field;
         this.index = index;
         this.ccName = Util.camelCase(field.getName());
     }
 
-    public static LightProtoField create(Field field, int index) {
+    public static LightProtoField create(ProtoFieldDescriptor field, int index) {
         if (field.isRepeated()) {
             if (field.isMessageField()) {
-                return new LightProtoRepeatedMessageField((MessageField) field, index);
+                return new LightProtoRepeatedMessageField(field, index);
             } else if (field.isStringField()) {
-                return new LightProtoRepeatedStringField((Field.String) field, index);
+                return new LightProtoRepeatedStringField(field, index);
             } else if (field.isEnumField()) {
                 return new LightProtoRepeatedEnumField(field, index);
             } else if (field.isNumberField() || field.isBoolField()) {
                 return new LightProtoRepeatedNumberField(field, index);
             } else if (field.isBytesField()) {
-                return new LightProtoRepeatedBytesField((Field.Bytes) field, index);
+                return new LightProtoRepeatedBytesField(field, index);
             }
         } else if (field.isMessageField()) {
-            return new LightProtoMessageField((MessageField) field, index);
+            return new LightProtoMessageField(field, index);
         } else if (field.isBytesField()) {
-            return new LightProtoBytesField((Field.Bytes) field, index);
+            return new LightProtoBytesField(field, index);
         } else if (field.isStringField()) {
-            return new LightProtoStringField((Field.String) field, index);
+            return new LightProtoStringField(field, index);
         } else if (field.isEnumField()) {
             return new LightProtoEnumField(field, index);
         } else if (field.isNumberField()) {
@@ -122,7 +119,7 @@ public abstract class LightProtoField<FieldType extends Field<?>> {
     abstract public void copy(PrintWriter w);
 
     public boolean isPackable() {
-        return field.isRepeated() && field.isPackable();
+        return field.isPackable();
     }
 
     public void parsePacked(PrintWriter w) {

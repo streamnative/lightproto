@@ -15,13 +15,11 @@
  */
 package io.github.merlimat.lightproto.generator;
 
-import io.protostuff.parser.Field;
-
 import java.io.PrintWriter;
 
-public class LightProtoBytesField extends LightProtoField<Field.Bytes> {
+public class LightProtoBytesField extends LightProtoField {
 
-    public LightProtoBytesField(Field.Bytes field, int index) {
+    public LightProtoBytesField(ProtoFieldDescriptor field, int index) {
         super(field, index);
     }
 
