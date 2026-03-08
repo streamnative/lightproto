@@ -176,7 +176,7 @@ public class LightProtoNumberField extends LightProtoField<Field<?>> {
 
     @Override
     public void serialize(PrintWriter w) {
-        w.format("LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+        w.format("%s;\n", writeTagExpr(tagName()));
         serializeNumber(w, field, ccName);
     }
 

@@ -66,7 +66,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
     @Override
     public void serialize(PrintWriter w) {
         if (field.getOption("packed") == Boolean.TRUE) {
-            w.format("    LightProtoCodec.writeVarInt(_b, %s_PACKED);\n", tagName());
+            w.format("    %s;\n", writeTagExpr(tagName() + "_PACKED"));
             w.format("    int _%sSize = 0;\n", pluralName);
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
             w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
@@ -80,7 +80,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated<Fi
         } else {
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
             w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            w.format("    LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+            w.format("    %s;\n", writeTagExpr(tagName()));
             LightProtoNumberField.serializeNumber(w, field, "_item");
             w.format("}\n");
         }

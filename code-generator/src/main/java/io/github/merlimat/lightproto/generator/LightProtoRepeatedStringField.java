@@ -77,7 +77,7 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated<Fi
     public void serialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.StringHolder _sh = %s.get(i);\n", pluralName);
-        w.format("    LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+        w.format("    %s;\n", writeTagExpr(tagName()));
         w.format("    LightProtoCodec.writeVarInt(_b, _sh.len);\n");
         w.format("    if (_sh.idx == -1) {\n");
         w.format("         LightProtoCodec.writeString(_b, _sh.s, _sh.len);\n");

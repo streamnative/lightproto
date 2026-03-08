@@ -72,7 +72,7 @@ public class LightProtoMessageField extends LightProtoField<MessageField> {
 
     @Override
     public void serialize(PrintWriter w) {
-        w.format("LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+        w.format("%s;\n", writeTagExpr(tagName()));
         w.format("LightProtoCodec.writeVarInt(_b, %s.getSerializedSize());\n", ccName);
         w.format("%s.writeTo(_b);\n", ccName);
     }

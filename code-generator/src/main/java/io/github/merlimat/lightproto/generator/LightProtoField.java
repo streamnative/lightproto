@@ -130,6 +130,14 @@ public abstract class LightProtoField<FieldType extends Field<?>> {
 
     abstract protected String typeTag();
 
+    protected String writeTagExpr(String tag) {
+        if (field.getNumber() <= 15) {
+            return String.format("_b.writeByte(%s)", tag);
+        } else {
+            return String.format("LightProtoCodec.writeVarInt(_b, %s)", tag);
+        }
+    }
+
     protected String tagName() {
         return "_" + Util.upperCase(field.getName(), "tag");
     }

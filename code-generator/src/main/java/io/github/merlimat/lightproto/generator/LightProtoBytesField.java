@@ -104,7 +104,7 @@ public class LightProtoBytesField extends LightProtoField<Field.Bytes> {
 
     @Override
     public void serialize(PrintWriter w) {
-        w.format("LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+        w.format("%s;\n", writeTagExpr(tagName()));
         w.format("LightProtoCodec.writeVarInt(_b, _%sLen);\n", ccName);
 
         w.format("if (_%sIdx == -1) {\n", ccName);

@@ -86,7 +86,7 @@ public class LightProtoStringField extends LightProtoField<Field.String> {
 
     @Override
     public void serialize(PrintWriter w) {
-        w.format("LightProtoCodec.writeVarInt(_b, %s);\n", tagName());
+        w.format("%s;\n", writeTagExpr(tagName()));
         w.format("LightProtoCodec.writeVarInt(_b, _%sBufferLen);\n", ccName);
         w.format("if (_%sBufferIdx == -1) {\n", ccName);
         w.format("    LightProtoCodec.writeString(_b, %s, _%sBufferLen);\n", ccName, ccName);
