@@ -89,6 +89,8 @@
         <module>code-generator</module>
         <module>benchmark</module>
         <module>maven-plugin</module>
+        <module>gradle-plugin</module>
+        <module>gradle-plugin-marker</module>
         <module>tests</module>
     </modules>
 

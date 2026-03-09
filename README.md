@@ -11,9 +11,11 @@ High-performance Protocol Buffers code generator for Java, optimized for seriali
 - **Lazy string/bytes deserialization** — decoded only on access
 - **Optimized string handling** — single-copy ASCII fast path via `sun.misc.Unsafe`
 - **No runtime dependencies** — generated code is self-contained
-- **Maven plugin** for seamless build integration
+- **Maven and Gradle plugins** for seamless build integration
 
 ## Usage
+
+### Maven
 
 Add the Maven plugin to your `pom.xml`:
 
@@ -34,6 +36,43 @@ Add the Maven plugin to your `pom.xml`:
 
 Place `.proto` files in `src/main/proto/` and LightProto will generate Java classes during the
 `generate-sources` phase.
+
+### Gradle
+
+Add the plugin to your `build.gradle`:
+
+```groovy
+plugins {
+    id 'io.github.merlimat.lightproto' version '0.5-SNAPSHOT'
+}
+```
+
+Or using the `buildscript` block:
+
+```groovy
+buildscript {
+    repositories {
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'io.github.merlimat.lightproto:lightproto-gradle-plugin:0.5-SNAPSHOT'
+    }
+}
+
+apply plugin: 'io.github.merlimat.lightproto'
+```
+
+Place `.proto` files in `src/main/proto/` and LightProto will generate Java classes automatically
+before compilation. Optional configuration:
+
+```groovy
+lightproto {
+    classPrefix = ''           // prefix for generated class names
+    singleOuterClass = false   // wrap all messages in a single outer class
+    protocVersion = '4.34.0'   // protoc compiler version
+    // protocPath = '/usr/local/bin/protoc'  // use a local protoc binary
+}
+```
 
 ### API Example
 
