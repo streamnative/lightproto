@@ -55,6 +55,9 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
     @OutputDirectory
     public abstract DirectoryProperty getOutputDirectory();
 
+    @Internal
+    public abstract ConfigurableFileCollection getExtraProtoPaths();
+
     @Classpath
     public abstract ConfigurableFileCollection getProtocDependency();
 
@@ -78,7 +81,11 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
             List<String> command = new ArrayList<>();
             command.add(protocFile.getAbsolutePath());
             command.add("--descriptor_set_out=" + descriptorSetFile.getAbsolutePath());
+            command.add("--include_imports");
             command.add("--proto_path=" + protoDir.getAbsolutePath());
+            for (File extraPath : getExtraProtoPaths().getFiles()) {
+                command.add("--proto_path=" + extraPath.getAbsolutePath());
+            }
             for (File f : protoFiles) {
                 command.add(f.getAbsolutePath());
             }
@@ -117,11 +124,15 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
                 requestedFiles.add(protoDirPath.relativize(f.toPath()).toString());
             }
 
+            // Build type registry from all files for cross-package type resolution
+            Map<String, String> typeRegistry = DescriptorConverter.buildTypeRegistry(
+                    descriptorSet.getFileList());
+
             List<ProtoFileDescriptor> descriptors = new ArrayList<>();
             List<String> fileNames = new ArrayList<>();
             for (FileDescriptorProto fdp : descriptorSet.getFileList()) {
                 if (requestedFiles.contains(fdp.getName())) {
-                    descriptors.add(DescriptorConverter.convert(fdp));
+                    descriptors.add(DescriptorConverter.convert(fdp, typeRegistry));
                     String name = fdp.getName();
                     int lastSlash = name.lastIndexOf('/');
                     if (lastSlash >= 0) {

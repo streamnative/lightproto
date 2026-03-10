@@ -73,6 +73,9 @@ public class LightProtoMojo extends AbstractMojo {
     @Parameter(property = "protocPath", required = false)
     private String protocPath;
 
+    @Parameter(property = "extraProtoPaths", required = false)
+    private List<File> extraProtoPaths;
+
     @Component
     private RepositorySystem repoSystem;
 
@@ -93,7 +96,13 @@ public class LightProtoMojo extends AbstractMojo {
             List<String> command = new ArrayList<>();
             command.add(protocFile.getAbsolutePath());
             command.add("--descriptor_set_out=" + descriptorSetFile.getAbsolutePath());
+            command.add("--include_imports");
             command.add("--proto_path=" + protoDir.getAbsolutePath());
+            if (extraProtoPaths != null) {
+                for (File extraPath : extraProtoPaths) {
+                    command.add("--proto_path=" + extraPath.getAbsolutePath());
+                }
+            }
             for (File f : protoFiles) {
                 command.add(f.getAbsolutePath());
             }
@@ -131,11 +140,15 @@ public class LightProtoMojo extends AbstractMojo {
                 requestedFiles.add(protoDir.toPath().relativize(f.toPath()).toString());
             }
 
+            // Build type registry from all files for cross-package type resolution
+            Map<String, String> typeRegistry = DescriptorConverter.buildTypeRegistry(
+                    descriptorSet.getFileList());
+
             List<ProtoFileDescriptor> descriptors = new ArrayList<>();
             List<String> fileNames = new ArrayList<>();
             for (FileDescriptorProto fdp : descriptorSet.getFileList()) {
                 if (requestedFiles.contains(fdp.getName())) {
-                    descriptors.add(DescriptorConverter.convert(fdp));
+                    descriptors.add(DescriptorConverter.convert(fdp, typeRegistry));
                     String name = fdp.getName();
                     int lastSlash = name.lastIndexOf('/');
                     if (lastSlash >= 0) {

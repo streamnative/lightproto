@@ -15,7 +15,9 @@
  */
 package io.github.merlimat.lightproto.gradle;
 
+import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.provider.Property;
+import org.gradle.api.provider.SetProperty;
 
 public abstract class LightProtoExtension {
 
@@ -26,4 +28,8 @@ public abstract class LightProtoExtension {
     public abstract Property<String> getProtocVersion();
 
     public abstract Property<String> getProtocPath();
+
+    public abstract ConfigurableFileCollection getExtraProtoPaths();
+
+    public abstract SetProperty<String> getExcludes();
 }

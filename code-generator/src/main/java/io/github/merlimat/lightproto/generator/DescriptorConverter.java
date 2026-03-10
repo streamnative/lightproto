@@ -78,24 +78,81 @@ public class DescriptorConverter {
             Map.entry(FieldDescriptorProto.Type.TYPE_SINT64, "long")
     );
 
+    /**
+     * Converts a single proto file descriptor without cross-package type resolution.
+     * Types from other packages will use simple (unqualified) names.
+     */
     public static ProtoFileDescriptor convert(FileDescriptorProto fileProto) {
+        return convert(fileProto, Collections.emptyMap());
+    }
+
+    /**
+     * Converts a proto file descriptor with cross-package type resolution.
+     * Types from other packages will use fully-qualified Java class names.
+     *
+     * @param fileProto the file descriptor to convert
+     * @param typeRegistry maps fully-qualified proto type names (e.g. ".pulsar.proto.Subscription")
+     *                     to their fully-qualified Java class names
+     */
+    public static ProtoFileDescriptor convert(FileDescriptorProto fileProto,
+                                              Map<String, String> typeRegistry) {
         String javaPackage = resolveJavaPackage(fileProto);
         String syntax = fileProto.getSyntax().isEmpty() ? "proto2" : fileProto.getSyntax();
         String protoPackage = fileProto.getPackage();
+
+        TypeResolver resolver = new TypeResolver(javaPackage, typeRegistry);
 
         List<ProtoEnumDescriptor> enums = fileProto.getEnumTypeList().stream()
                 .map(DescriptorConverter::convertEnum)
                 .collect(Collectors.toList());
 
         List<ProtoMessageDescriptor> messages = fileProto.getMessageTypeList().stream()
-                .map(m -> convertMessage(m, syntax))
+                .map(m -> convertMessage(m, syntax, resolver))
                 .collect(Collectors.toList());
 
         List<ProtoServiceDescriptor> services = fileProto.getServiceList().stream()
-                .map(s -> convertService(s, protoPackage))
+                .map(s -> convertService(s, protoPackage, resolver))
                 .collect(Collectors.toList());
 
         return new ProtoFileDescriptor(javaPackage, syntax, messages, enums, services);
+    }
+
+    /**
+     * Builds a type registry from a list of file descriptors. Maps fully-qualified proto type names
+     * to their fully-qualified Java class names.
+     */
+    public static Map<String, String> buildTypeRegistry(List<FileDescriptorProto> allFiles) {
+        Map<String, String> registry = new HashMap<>();
+        for (FileDescriptorProto file : allFiles) {
+            String javaPackage = resolveJavaPackage(file);
+            String protoPackage = file.getPackage();
+            String prefix = protoPackage.isEmpty() ? "." : "." + protoPackage + ".";
+
+            for (DescriptorProto msg : file.getMessageTypeList()) {
+                registerMessageTypes(registry, prefix, javaPackage, "", msg);
+            }
+            for (EnumDescriptorProto e : file.getEnumTypeList()) {
+                registry.put(prefix + e.getName(), javaPackage + "." + e.getName());
+            }
+        }
+        return registry;
+    }
+
+    private static void registerMessageTypes(Map<String, String> registry,
+                                             String protoPrefix, String javaPackage,
+                                             String javaPrefix, DescriptorProto msg) {
+        String protoName = protoPrefix + msg.getName();
+        String javaName = javaPackage + "." + (javaPrefix.isEmpty() ? "" : javaPrefix + ".") + msg.getName();
+        registry.put(protoName, javaName);
+
+        String nestedJavaPrefix = javaPrefix.isEmpty() ? msg.getName() : javaPrefix + "." + msg.getName();
+        for (DescriptorProto nested : msg.getNestedTypeList()) {
+            registerMessageTypes(registry, protoName + ".", javaPackage, nestedJavaPrefix, nested);
+        }
+        for (EnumDescriptorProto e : msg.getEnumTypeList()) {
+            registry.put(protoName + "." + e.getName(),
+                    javaPackage + "." + nestedJavaPrefix + "." + e.getName());
+        }
     }
 
     private static String resolveJavaPackage(FileDescriptorProto fileProto) {
@@ -105,7 +162,8 @@ public class DescriptorConverter {
         return fileProto.getPackage();
     }
 
-    private static ProtoMessageDescriptor convertMessage(DescriptorProto messageProto, String syntax) {
+    private static ProtoMessageDescriptor convertMessage(DescriptorProto messageProto, String syntax,
+                                                         TypeResolver resolver) {
         List<ProtoEnumDescriptor> nestedEnums = messageProto.getEnumTypeList().stream()
                 .map(DescriptorConverter::convertEnum)
                 .collect(Collectors.toList());
@@ -121,7 +179,7 @@ public class DescriptorConverter {
         // Filter out map_entry messages from nested messages
         List<ProtoMessageDescriptor> nestedMessages = messageProto.getNestedTypeList().stream()
                 .filter(nested -> !mapEntryTypes.containsKey(nested.getName()))
-                .map(m -> convertMessage(m, syntax))
+                .map(m -> convertMessage(m, syntax, resolver))
                 .collect(Collectors.toList());
 
         // Identify synthetic oneofs (created by protoc for proto3 optional fields)
@@ -143,7 +201,7 @@ public class DescriptorConverter {
         }
 
         List<ProtoFieldDescriptor> fields = messageProto.getFieldList().stream()
-                .map(f -> convertField(f, oneofs, mapEntryTypes, syntax, syntheticOneofIndices))
+                .map(f -> convertField(f, oneofs, mapEntryTypes, syntax, syntheticOneofIndices, resolver))
                 .collect(Collectors.toList());
 
         return new ProtoMessageDescriptor(messageProto.getName(), fields, nestedMessages, nestedEnums, oneofs);
@@ -159,7 +217,8 @@ public class DescriptorConverter {
                                                         List<ProtoOneofDescriptor> oneofs,
                                                         Map<String, DescriptorProto> mapEntryTypes,
                                                         String syntax,
-                                                        Set<Integer> syntheticOneofIndices) {
+                                                        Set<Integer> syntheticOneofIndices,
+                                                        TypeResolver resolver) {
         boolean proto3 = "proto3".equals(syntax);
         boolean proto3Optional = fieldProto.getProto3Optional();
 
@@ -171,7 +230,7 @@ public class DescriptorConverter {
 
         String javaType;
         if (type == FieldDescriptorProto.Type.TYPE_MESSAGE || type == FieldDescriptorProto.Type.TYPE_ENUM) {
-            javaType = resolveTypeName(fieldProto.getTypeName());
+            javaType = resolver.resolveTypeName(fieldProto.getTypeName());
         } else {
             javaType = JAVA_TYPE_NAMES.get(type);
         }
@@ -253,12 +312,13 @@ public class DescriptorConverter {
         ProtoFieldDescriptor mapValueField = null;
         if (label == ProtoFieldDescriptor.Label.REPEATED
                 && type == FieldDescriptorProto.Type.TYPE_MESSAGE) {
-            String entryTypeName = resolveTypeName(fieldProto.getTypeName());
+            // For map entry lookup, use simple name (map entries are always nested in the same message)
+            String entryTypeName = resolveSimpleTypeName(fieldProto.getTypeName());
             DescriptorProto entryProto = mapEntryTypes.get(entryTypeName);
             if (entryProto != null) {
                 isMapField = true;
                 for (FieldDescriptorProto entryField : entryProto.getFieldList()) {
-                    ProtoFieldDescriptor entryFieldDesc = convertSimpleField(entryField);
+                    ProtoFieldDescriptor entryFieldDesc = convertSimpleField(entryField, resolver);
                     if (entryField.getNumber() == 1) {
                         mapKeyField = entryFieldDesc;
                     } else if (entryField.getNumber() == 2) {
@@ -277,12 +337,13 @@ public class DescriptorConverter {
     /**
      * Converts a field descriptor to a simple ProtoFieldDescriptor (used for map key/value fields).
      */
-    private static ProtoFieldDescriptor convertSimpleField(FieldDescriptorProto fieldProto) {
+    private static ProtoFieldDescriptor convertSimpleField(FieldDescriptorProto fieldProto,
+                                                           TypeResolver resolver) {
         FieldDescriptorProto.Type type = fieldProto.getType();
         String protoType = PROTO_TYPE_NAMES.get(type);
         String javaType;
         if (type == FieldDescriptorProto.Type.TYPE_MESSAGE || type == FieldDescriptorProto.Type.TYPE_ENUM) {
-            javaType = resolveTypeName(fieldProto.getTypeName());
+            javaType = resolver.resolveTypeName(fieldProto.getTypeName());
         } else {
             javaType = JAVA_TYPE_NAMES.get(type);
         }
@@ -300,12 +361,13 @@ public class DescriptorConverter {
         return new ProtoEnumDescriptor(enumProto.getName(), values);
     }
 
-    private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto, String protoPackage) {
+    private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto, String protoPackage,
+                                                         TypeResolver resolver) {
         List<ProtoMethodDescriptor> methods = serviceProto.getMethodList().stream()
                 .map(m -> new ProtoMethodDescriptor(
                         m.getName(),
-                        resolveTypeName(m.getInputType()),
-                        resolveTypeName(m.getOutputType()),
+                        resolver.resolveTypeName(m.getInputType()),
+                        resolver.resolveTypeName(m.getOutputType()),
                         m.getClientStreaming(),
                         m.getServerStreaming()))
                 .collect(Collectors.toList());
@@ -313,11 +375,10 @@ public class DescriptorConverter {
     }
 
     /**
-     * Resolves a fully-qualified proto type name to a simple Java class name.
-     * Proto type names from descriptors are like ".package.OuterMessage.InnerMessage".
-     * We take the last component as the Java type name.
+     * Resolves a fully-qualified proto type name to a simple (last component) name.
+     * Used only for map entry type lookup where the entry is always in the same message.
      */
-    private static String resolveTypeName(String typeName) {
+    private static String resolveSimpleTypeName(String typeName) {
         if (typeName == null || typeName.isEmpty()) {
             return typeName;
         }
@@ -326,5 +387,44 @@ public class DescriptorConverter {
             return typeName.substring(lastDot + 1);
         }
         return typeName;
+    }
+
+    /**
+     * Resolves proto type names to Java type names, using fully-qualified names
+     * when the type is from a different Java package.
+     */
+    static class TypeResolver {
+        private final String currentJavaPackage;
+        private final Map<String, String> typeRegistry;
+
+        TypeResolver(String currentJavaPackage, Map<String, String> typeRegistry) {
+            this.currentJavaPackage = currentJavaPackage;
+            this.typeRegistry = typeRegistry;
+        }
+
+        String resolveTypeName(String typeName) {
+            if (typeName == null || typeName.isEmpty()) {
+                return typeName;
+            }
+
+            // Look up the type in the registry
+            String fqJavaName = typeRegistry.get(typeName);
+            if (fqJavaName != null) {
+                // Check if the type is in the same Java package
+                int lastDot = fqJavaName.lastIndexOf('.');
+                if (lastDot >= 0) {
+                    String typePackage = fqJavaName.substring(0, lastDot);
+                    if (typePackage.equals(currentJavaPackage)) {
+                        // Same package: use simple name
+                        return fqJavaName.substring(lastDot + 1);
+                    }
+                }
+                // Different package: use fully-qualified name
+                return fqJavaName;
+            }
+
+            // Fallback: extract simple name (for types not in the registry)
+            return resolveSimpleTypeName(typeName);
+        }
     }
 }

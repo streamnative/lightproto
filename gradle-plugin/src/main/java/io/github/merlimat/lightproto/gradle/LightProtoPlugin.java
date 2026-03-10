@@ -53,9 +53,15 @@ public class LightProtoPlugin implements Plugin<Project> {
                     task.getSingleOuterClass().set(extension.getSingleOuterClass());
                     task.getProtocVersion().set(extension.getProtocVersion());
                     task.getProtocPath().set(extension.getProtocPath());
+                    task.getExtraProtoPaths().from(extension.getExtraProtoPaths());
 
                     task.getProtoFiles().from(
-                            project.fileTree(protoDir, tree -> tree.include("**/*.proto"))
+                            project.fileTree(protoDir, tree -> {
+                                tree.include("**/*.proto");
+                                for (String exclude : extension.getExcludes().getOrElse(java.util.Collections.emptySet())) {
+                                    tree.exclude(exclude);
+                                }
+                            })
                     );
 
                     task.getOutputDirectory().set(
