@@ -46,6 +46,9 @@ public class LightProtoService {
         // SERVICE_NAME constant
         w.format("    public static final String SERVICE_NAME = \"%s\";\n\n", fullServiceName);
 
+        // ByteBufInputStream reflection field for zero-copy deserialization
+        generateByteBufInputStreamField(w);
+
         // Marshaller factory method
         generateMarshallerFactory(w);
 
@@ -108,6 +111,20 @@ public class LightProtoService {
         w.println("}");
     }
 
+    private void generateByteBufInputStreamField(PrintWriter w) {
+        w.println("    private static final java.lang.reflect.Field BYTE_BUF_INPUT_STREAM_BUFFER;");
+        w.println("    static {");
+        w.println("        java.lang.reflect.Field f = null;");
+        w.println("        try {");
+        w.println("            f = io.netty.buffer.ByteBufInputStream.class.getDeclaredField(\"buffer\");");
+        w.println("            f.setAccessible(true);");
+        w.println("        } catch (Exception e) {");
+        w.println("            // Fall back to byte array copy if reflection fails");
+        w.println("        }");
+        w.println("        BYTE_BUF_INPUT_STREAM_BUFFER = f;");
+        w.println("    }\n");
+    }
+
     private void generateMarshallerFactory(PrintWriter w) {
         w.println("    private static <T extends LightProtoCodec.LightProtoMessage> io.grpc.MethodDescriptor.Marshaller<T> marshaller(");
         w.println("            java.util.function.Supplier<T> factory) {");
@@ -122,12 +139,20 @@ public class LightProtoService {
         w.println("            @Override");
         w.println("            public T parse(java.io.InputStream stream) {");
         w.println("                try (stream) {");
-        w.println("                    byte[] bytes = stream.readAllBytes();");
-        w.println("                    io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.wrappedBuffer(bytes);");
+        w.println("                    if (BYTE_BUF_INPUT_STREAM_BUFFER != null");
+        w.println("                            && stream instanceof io.netty.buffer.ByteBufInputStream) {");
+        w.println("                        io.netty.buffer.ByteBuf buf =");
+        w.println("                                (io.netty.buffer.ByteBuf) BYTE_BUF_INPUT_STREAM_BUFFER.get(stream);");
+        w.println("                        T msg = factory.get();");
+        w.println("                        msg.parseFrom(buf, buf.readableBytes(), true);");
+        w.println("                        return msg;");
+        w.println("                    }");
         w.println("                    T msg = factory.get();");
-        w.println("                    msg.parseFrom(buf, bytes.length);");
+        w.println("                    msg.parseFrom(stream.readAllBytes());");
         w.println("                    return msg;");
         w.println("                } catch (java.io.IOException e) {");
+        w.println("                    throw new RuntimeException(e);");
+        w.println("                } catch (IllegalAccessException e) {");
         w.println("                    throw new RuntimeException(e);");
         w.println("                }");
         w.println("            }");
