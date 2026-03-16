@@ -31,6 +31,9 @@ jobs:
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
           gpg-passphrase: GPG_PASSPHRASE
 
+      - name: Show GPG key info
+        run: gpg --list-keys --keyid-format long
+
       - name: Set version from tag
         run: |
           VERSION=${GITHUB_REF_NAME#v}
