@@ -21,7 +21,7 @@ Add the Maven plugin to your `pom.xml`:
 
 ```xml
 <plugin>
-    <groupId>io.github.merlimat.lightproto</groupId>
+    <groupId>io.streamnative.lightproto</groupId>
     <artifactId>lightproto-maven-plugin</artifactId>
     <version>0.5-SNAPSHOT</version>
     <executions>
@@ -43,7 +43,7 @@ Add the plugin to your `build.gradle`:
 
 ```groovy
 plugins {
-    id 'io.github.merlimat.lightproto' version '0.5-SNAPSHOT'
+    id 'io.streamnative.lightproto' version '0.5-SNAPSHOT'
 }
 ```
 
@@ -55,11 +55,11 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'io.github.merlimat.lightproto:lightproto-gradle-plugin:0.5-SNAPSHOT'
+        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.5-SNAPSHOT'
     }
 }
 
-apply plugin: 'io.github.merlimat.lightproto'
+apply plugin: 'io.streamnative.lightproto'
 ```
 
 Place `.proto` files in `src/main/proto/` and LightProto will generate Java classes automatically

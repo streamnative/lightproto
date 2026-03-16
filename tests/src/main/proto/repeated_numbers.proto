@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 syntax = "proto2";
-package io.github.merlimat.lightproto.tests;
+package io.streamnative.lightproto.tests;
 
 message Repeated {
     enum Enum {

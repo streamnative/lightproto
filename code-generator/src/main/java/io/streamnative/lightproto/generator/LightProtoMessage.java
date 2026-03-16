@@ -1,0 +1,382 @@
+/**
+ * Copyright 2026 StreamNative
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package io.streamnative.lightproto.generator;
+
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
+public class LightProtoMessage {
+
+    private final ProtoMessageDescriptor message;
+    private final boolean isNested;
+    private final List<LightProtoEnum> enums;
+    private final List<LightProtoField> fields;
+    private final List<LightProtoMessage> nestedMessages;
+    private final List<ProtoOneofDescriptor> oneofs;
+    private final Map<Integer, List<LightProtoField>> oneofFields;
+
+    public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested) {
+        this.message = message;
+        this.isNested = isNested;
+        this.enums = message.getNestedEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
+        this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true)).collect(Collectors.toList());
+        this.oneofs = message.getOneofs();
+
+        this.fields = new ArrayList<>();
+        for (int i = 0; i < message.getFields().size(); i++) {
+            fields.add(LightProtoField.create(message.getFields().get(i), i));
+        }
+
+        this.oneofFields = new HashMap<>();
+        for (LightProtoField f : fields) {
+            if (f.isOneofMember()) {
+                oneofFields.computeIfAbsent(f.field.getOneofIndex(), k -> new ArrayList<>()).add(f);
+            }
+        }
+    }
+
+    public String getName() {
+        return message.getName();
+    }
+
+    public void generate(PrintWriter w) {
+        Util.writeJavadoc(w, message.getDoc(), "    ");
+        w.format("    public %s final class %s implements LightProtoCodec.LightProtoMessage {\n", isNested ? "static" : "", message.getName());
+
+        enums.forEach(e -> e.generate(w));
+        nestedMessages.forEach(nm -> nm.generate(w));
+        fields.forEach(field -> {
+            field.docs(w);
+            field.declaration(w);
+            field.tags(w);
+            field.has(w);
+            field.getter(w);
+            field.setter(w, message.getName());
+            field.fieldClear(w, message.getName());
+            w.println();
+        });
+
+        generateBitFields(w);
+        generateOneofFields(w);
+        generateSerialize(w);
+        generateGetSerializedSize(w);
+        generateParseFrom(w);
+        generateCheckRequiredFields(w);
+        generateClear(w);
+        generateCopyFrom(w);
+
+        generateMaterialize(w);
+
+        w.println("        /**");
+        w.println("         * Deserialize this message from the given buffer, optionally resolving all");
+        w.println("         * lazy fields eagerly so the object does not retain a reference to the buffer.");
+        w.println("         * @param _buffer the buffer to read from");
+        w.println("         * @param _size the number of bytes to read");
+        w.println("         * @param eager if true, all fields are fully deserialized and the buffer reference is released");
+        w.println("         */");
+        w.println("        public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size, boolean eager) {");
+        w.println("            parseFrom(_buffer, _size);");
+        w.println("            if (eager) { _materialize(); }");
+        w.println("        }");
+
+        w.println("        /** Serialize this message to a new byte array. */");
+        w.println("        public byte[] toByteArray() {");
+        w.println("            byte[] a = new byte[getSerializedSize()];");
+        w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a).writerIndex(0);");
+        w.println("            this.writeTo(b);");
+        w.println("            return a;");
+        w.println("        }");
+
+        w.println("        /** Deserialize this message from a byte array. */");
+        w.println("        public void parseFrom(byte[] a) {");
+        w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a);");
+        w.println("            this.parseFrom(b, b.readableBytes());");
+        w.println("        }");
+
+
+        w.println("        private int _cachedSize;\n");
+        w.println("        private io.netty.buffer.ByteBuf _parsedBuffer;\n");
+        w.println("    }");
+        w.println();
+    }
+
+    private void generateParseFrom(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Deserialize this message from the given buffer.");
+        w.println("         * @param _buffer the buffer to read from");
+        w.println("         * @param _size the number of bytes to read");
+        w.println("         */");
+        w.format("        @Override public void parseFrom(io.netty.buffer.ByteBuf _buffer, int _size) {\n");
+        w.format("            clear();\n");
+        w.format("            int _endIdx = _buffer.readerIndex() + _size;\n");
+        w.format("            boolean _hasUnknownFields = false;\n");
+        w.format("            while (_buffer.readerIndex() < _endIdx) {\n");
+        w.format("                int _tag = LightProtoCodec.readVarInt(_buffer);\n");
+        w.format("                switch (_tag) {\n");
+
+        for (LightProtoField field : fields) {
+            w.format("                case %s:\n", field.tagName());
+            if (!field.isRepeated() && !field.isEnum()) {
+                if (field.isOneofMember()) {
+                    w.format("                    _%sCase = %s;\n",
+                            Util.camelCase(field.field.getOneofName()), field.fieldNumber());
+                } else if (!field.field.hasImplicitPresence()) {
+                    w.format("                    _bitField%d |= %s;\n", field.bitFieldIndex(), field.fieldMask());
+                }
+            }
+            field.parse(w);
+            w.format("                    break;\n");
+        }
+
+        for (LightProtoField field : fields) {
+            if (field.isPackable()) {
+                w.format("                case %s_PACKED:\n", field.tagName());
+                field.parsePacked(w);
+                w.format("                    break;\n");
+            }
+        }
+
+        w.format("                default:\n");
+        w.format("                    _hasUnknownFields = true;\n");
+        w.format("                    LightProtoCodec.skipUnknownField(_tag, _buffer);\n");
+        w.format("                }\n");
+        w.format("            }\n");
+        if (hasRequiredFields()) {
+            w.format("            checkRequiredFields();\n");
+        }
+        w.format("            if (!_hasUnknownFields) {\n");
+        w.format("                _cachedSize = _size;\n");
+        w.format("            }\n");
+        w.format("            _parsedBuffer = _buffer;\n");
+        w.format("        }\n");
+    }
+
+    private void generateClear(PrintWriter w) {
+        w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
+        w.format("        public %s clear() {\n", message.getName());
+        for (LightProtoField f : fields) {
+            f.clear(w);
+        }
+
+        w.format("            _parsedBuffer = null;\n");
+        w.format("            _cachedSize = -1;\n");
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            w.format("            _bitField%d = 0;\n", i);
+        }
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            w.format("            _%sCase = 0;\n", Util.camelCase(oneof.getName()));
+        }
+
+        w.format("            return this;\n");
+        w.format("        }\n");
+    }
+
+    private void generateCopyFrom(PrintWriter w) {
+        w.println("        /** Copy all fields from another message of the same type. */");
+        w.format("public %s copyFrom(%s _other) {\n", message.getName(), message.getName());
+        w.format("            _cachedSize = -1;\n");
+        for (LightProtoField f : fields) {
+            if (f.isRepeated()) {
+                f.copy(w);
+            } else if (f.field.hasImplicitPresence()) {
+                // Always copy for proto3 implicit presence — no has() to check
+                f.copy(w);
+            } else {
+                w.format("    if (_other.%s()) {\n", Util.camelCase("has", f.ccName));
+                f.copy(w);
+                w.format("    }\n");
+            }
+        }
+
+        w.format("            return this;\n");
+        w.format("        }\n");
+    }
+
+    private void generateSerialize(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Serialize this message to the given buffer.");
+        w.println("         * @return the number of bytes written");
+        w.println("         */");
+        w.format("        @Override public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
+        if (hasRequiredFields()) {
+            w.format("            checkRequiredFields();\n");
+        }
+        w.format("            int _writeIdx = _b.writerIndex();\n");
+        w.format("            int _serializedSize = getSerializedSize();\n");
+        w.format("            _b.ensureWritable(_serializedSize);\n");
+        w.format("            Object _base;\n");
+        w.format("            long _addr;\n");
+        w.format("            long _baseOffset;\n");
+        w.format("            if (_b.hasMemoryAddress()) {\n");
+        w.format("                _base = null;\n");
+        w.format("                _baseOffset = _b.memoryAddress();\n");
+        w.format("            } else {\n");
+        w.format("                _base = _b.array();\n");
+        w.format("                _baseOffset = LightProtoCodec.BYTE_ARRAY_BASE_OFFSET + _b.arrayOffset();\n");
+        w.format("            }\n");
+        w.format("            _addr = _baseOffset + _writeIdx;\n");
+        for (LightProtoField f : fields) {
+            String condition = f.serializeCondition();
+            if (condition != null) {
+                w.format("            if (%s) {\n", condition);
+                f.serialize(w);
+                w.format("            }\n");
+            } else {
+                f.serialize(w);
+            }
+        }
+
+        w.format("            _b.writerIndex(_writeIdx + _serializedSize);\n");
+        w.format("            return _serializedSize;\n");
+        w.format("        }\n");
+    }
+
+    private void generateGetSerializedSize(PrintWriter w) {
+        w.println("        /** Returns the serialized size of this message in bytes. */");
+        w.format("@Override public int getSerializedSize() {\n");
+        w.format("    if (_cachedSize > -1) {\n");
+        w.format("        return _cachedSize;\n");
+        w.format("    }\n");
+        w.format("\n");
+
+        w.format("    int _size = 0;\n");
+        fields.forEach(field -> {
+            String condition = field.serializeCondition();
+            if (condition != null) {
+                w.format("        if (%s) {\n", condition);
+                field.serializedSize(w);
+                w.format("        }\n");
+            } else {
+                field.serializedSize(w);
+            }
+        });
+
+        w.format("            _cachedSize = _size;\n");
+        w.format("            return _size;\n");
+        w.format("        }\n");
+    }
+
+    private void generateBitFields(PrintWriter w) {
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            w.format("private int _bitField%d;\n", i);
+            w.format("private static final int _REQUIRED_FIELDS_MASK%d = 0", i);
+            int idx = i;
+            fields.forEach(f -> {
+                if (f.isRequired() && f.index() / 32 == idx) {
+                    w.format(" | %s", f.fieldMask());
+                }
+            });
+            w.println(";");
+        }
+    }
+
+    private void generateCheckRequiredFields(PrintWriter w) {
+        if (!hasRequiredFields()) {
+            return;
+        }
+
+        w.format("        private void checkRequiredFields() {\n");
+        w.format("            if (");
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            if (i != 0) {
+                w.print("\n             || ");
+            }
+
+            w.format("(_bitField%d & _REQUIRED_FIELDS_MASK%d) != _REQUIRED_FIELDS_MASK%d", i, i, i);
+        }
+
+        w.format(")   {\n");
+        w.format("      throw new IllegalStateException(\"Some required fields are missing\");\n");
+        w.format("    }\n");
+        w.format("}\n");
+    }
+
+    private int bitFieldsCount() {
+        if (message.getFieldCount() == 0) {
+            return 0;
+        }
+
+        return (int) Math.ceil(message.getFields().size() / 32.0);
+    }
+
+
+    private boolean hasRequiredFields() {
+        for (LightProtoField field : fields) {
+            if (field.isRequired()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void generateMaterialize(PrintWriter w) {
+        w.println("        void _materialize() {");
+        for (LightProtoField f : fields) {
+            f.materialize(w);
+        }
+        w.println("            _parsedBuffer = null;");
+        w.println("        }");
+    }
+
+    private void generateOneofFields(PrintWriter w) {
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            String ccOneofName = Util.camelCase(oneof.getName());
+            String ucOneofName = Util.camelCaseFirstUpper(oneof.getName());
+            List<LightProtoField> members = oneofFields.getOrDefault(oneof.getIndex(), List.of());
+
+            // Case tracking field
+            w.format("private int _%sCase = 0;\n", ccOneofName);
+
+            // Case enum
+            w.format("public enum %sCase {\n", ucOneofName);
+            for (LightProtoField f : members) {
+                String enumConstant = Util.upperCase(Util.camelCase(f.field.getName()));
+                w.format("    %s(%d),\n", enumConstant, f.field.getNumber());
+            }
+            w.format("    NOT_SET(0);\n");
+            w.format("    private final int value;\n");
+            w.format("    %sCase(int value) { this.value = value; }\n", ucOneofName);
+            w.format("    public int getValue() { return value; }\n");
+            w.format("}\n");
+
+            // getXxxCase() getter
+            w.format("public %sCase %s() {\n", ucOneofName, Util.camelCase("get", oneof.getName(), "case"));
+            w.format("    switch (_%sCase) {\n", ccOneofName);
+            for (LightProtoField f : members) {
+                String enumConstant = Util.upperCase(Util.camelCase(f.field.getName()));
+                w.format("        case %d: return %sCase.%s;\n", f.field.getNumber(), ucOneofName, enumConstant);
+            }
+            w.format("        default: return %sCase.NOT_SET;\n", ucOneofName);
+            w.format("    }\n");
+            w.format("}\n");
+
+            // clearXxx() method for the oneof group
+            w.format("public %s %s() {\n", message.getName(), Util.camelCase("clear", oneof.getName()));
+            for (LightProtoField f : members) {
+                f.clear(w);
+            }
+            w.format("    _%sCase = 0;\n", ccOneofName);
+            w.format("    _cachedSize = -1;\n");
+            w.format("    return this;\n");
+            w.format("}\n");
+        }
+    }
+}

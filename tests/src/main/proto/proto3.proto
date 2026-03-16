@@ -1,5 +1,5 @@
 syntax = "proto3";
-package io.github.merlimat.lightproto.tests;
+package io.streamnative.lightproto.tests;
 
 option java_outer_classname = "Proto3Protos";
 
