@@ -100,6 +100,23 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- Re-run all tests with -XX:-CompactStrings to verify
+                 the Unsafe fast paths fall back correctly when compact strings are disabled -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>no-compact-strings</id>
+                        <goals>
+                            <goal>test</goal>
+                        </goals>
+                        <configuration>
+                            <argLine>-XX:-CompactStrings</argLine>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

@@ -27,23 +27,34 @@ class LightProtoCodec {
     private static final long STRING_VALUE_OFFSET;
     static final long BYTE_ARRAY_BASE_OFFSET;
     static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
+    // True when JDK compact strings are enabled (default since JDK 9).
+    // When disabled via -XX:-CompactStrings, String's internal byte[] uses UTF-16
+    // and we must not use the Unsafe string fast paths.
+    private static final boolean COMPACT_STRINGS;
 
     static {
         sun.misc.Unsafe unsafe = null;
         long offset = -1;
         long arrayBase = -1;
+        boolean compactStrings = false;
         try {
             java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
             unsafe = (sun.misc.Unsafe) f.get(null);
             offset = unsafe.objectFieldOffset(String.class.getDeclaredField("value"));
             arrayBase = unsafe.arrayBaseOffset(byte[].class);
+            // Detect compact strings: an ASCII string's internal byte[] length
+            // equals the string length when compact strings are enabled (LATIN1 coder),
+            // but is 2x the string length when disabled (UTF-16 coder).
+            byte[] testValue = (byte[]) unsafe.getObject("a", offset);
+            compactStrings = (testValue.length == 1);
         } catch (NoSuchFieldException | IllegalAccessException ignore) {
             // Fallback to non-Unsafe path
         }
         UNSAFE = unsafe;
         STRING_VALUE_OFFSET = offset;
         BYTE_ARRAY_BASE_OFFSET = arrayBase;
+        COMPACT_STRINGS = compactStrings;
     }
 
     static final int TAG_TYPE_MASK = 7;
@@ -311,7 +322,7 @@ class LightProtoCodec {
             // then writeBytes in a single copy with zero intermediate allocation.
             // On JDK 9+ compact strings, ASCII strings use LATIN1 coder and the
             // internal value byte[] contains exactly the bytes we need.
-            if (UNSAFE != null) {
+            if (UNSAFE != null && COMPACT_STRINGS) {
                 byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
                 b.writeBytes(value, 0, bytesCount);
             } else {
@@ -388,7 +399,7 @@ class LightProtoCodec {
      * or -1 if the string is non-ASCII and needs UTF-8 encoding via ByteBuf.
      */
     static long writeRawString(Object base, long addr, String s, int bytesCount) {
-        if (s.length() == bytesCount) {
+        if (COMPACT_STRINGS && s.length() == bytesCount) {
             byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
             UNSAFE.copyMemory(value, BYTE_ARRAY_BASE_OFFSET, base, addr, bytesCount);
             return addr + bytesCount;
@@ -410,10 +421,11 @@ class LightProtoCodec {
                 b.getBytes(index, value, 0, len);
             }
 
-            // For ASCII strings (all bytes < 128), the bytes are valid Latin1 characters.
-            // Create a String directly via Unsafe, injecting the byte[] as the internal value
-            // with LATIN1 coder (0). This eliminates the second copy that new String() would do.
-            if (_isAscii(value, len)) {
+            // For ASCII strings (all bytes < 128), create a String directly via Unsafe,
+            // injecting the byte[] as the internal value with LATIN1 coder (0).
+            // This eliminates the second copy that new String() would do.
+            // Only possible when compact strings are enabled (-XX:+CompactStrings, the default).
+            if (COMPACT_STRINGS && _isAscii(value, len)) {
                 try {
                     String s = (String) UNSAFE.allocateInstance(String.class);
                     UNSAFE.putObject(s, STRING_VALUE_OFFSET, value);
@@ -424,7 +436,7 @@ class LightProtoCodec {
                 }
             }
 
-            // Non-ASCII: decode UTF-8 (creates another internal copy, but unavoidable)
+            // Non-ASCII or compact strings disabled: decode properly
             return new String(value, 0, len, StandardCharsets.UTF_8);
         }
         return b.toString(index, len, StandardCharsets.UTF_8);
