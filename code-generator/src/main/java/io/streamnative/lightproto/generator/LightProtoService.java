@@ -78,10 +78,12 @@ public class LightProtoService {
         }
 
         // Factory methods
+        w.format("    /** Creates a new async stub for the {@code %s} service. */\n", serviceName);
         w.format("    public static %sStub newStub(io.grpc.Channel channel) {\n", serviceName);
         w.format("        return %sStub.newStub(new %sStub.%sStubFactory(), channel);\n", serviceName, serviceName, serviceName);
         w.format("    }\n\n");
 
+        w.format("    /** Creates a new blocking stub for the {@code %s} service. */\n", serviceName);
         w.format("    public static %sBlockingStub newBlockingStub(io.grpc.Channel channel) {\n", serviceName);
         w.format("        return %sBlockingStub.newStub(new %sBlockingStub.%sBlockingStubFactory(), channel);\n",
                 serviceName, serviceName, serviceName);
@@ -175,6 +177,11 @@ public class LightProtoService {
         w.format("    private static volatile io.grpc.MethodDescriptor<%s, %s> %s;\n\n",
                 inputType, outputType, fieldName);
 
+        if (m.getDoc() != null && !m.getDoc().isEmpty()) {
+            Util.writeJavadoc(w, m.getDoc(), "    ");
+        } else {
+            w.format("    /** Returns the method descriptor for the {@code %s} RPC. */\n", methodName);
+        }
         w.format("    public static io.grpc.MethodDescriptor<%s, %s> %s() {\n",
                 inputType, outputType, getterName);
         w.format("        io.grpc.MethodDescriptor<%s, %s> result;\n", inputType, outputType);
@@ -197,6 +204,8 @@ public class LightProtoService {
     }
 
     private void generateAsyncService(PrintWriter w, List<ProtoMethodDescriptor> methods) {
+        w.format("    /** Async service interface for the {@code %s} service. */\n",
+                service.getName());
         w.println("    public interface AsyncService {");
         for (ProtoMethodDescriptor m : methods) {
             String ccMethod = javaMethodName(m.getName());
@@ -222,6 +231,7 @@ public class LightProtoService {
     }
 
     private void generateImplBase(PrintWriter w, String serviceName) {
+        w.format("    /** Base implementation of the {@code %s} service. */\n", serviceName);
         w.format("    public static abstract class %sImplBase implements io.grpc.BindableService, AsyncService {\n",
                 serviceName);
         w.format("        @Override\n");
@@ -234,6 +244,7 @@ public class LightProtoService {
     private void generateStub(PrintWriter w, String serviceName, List<ProtoMethodDescriptor> methods) {
         String stubName = serviceName + "Stub";
 
+        w.format("    /** Async stub for the {@code %s} service. */\n", serviceName);
         w.format("    public static final class %s extends io.grpc.stub.AbstractStub<%s> {\n", stubName, stubName);
         w.format("        private %s(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {\n", stubName);
         w.format("            super(channel, callOptions);\n");
@@ -292,6 +303,7 @@ public class LightProtoService {
     private void generateBlockingStub(PrintWriter w, String serviceName, List<ProtoMethodDescriptor> methods) {
         String stubName = serviceName + "BlockingStub";
 
+        w.format("    /** Blocking stub for the {@code %s} service. */\n", serviceName);
         w.format("    public static final class %s extends io.grpc.stub.AbstractStub<%s> {\n", stubName, stubName);
         w.format("        private %s(io.grpc.Channel channel, io.grpc.CallOptions callOptions) {\n", stubName);
         w.format("            super(channel, callOptions);\n");
@@ -397,6 +409,8 @@ public class LightProtoService {
     private void generateServiceDescriptor(PrintWriter w, String grpcClassName, List<ProtoMethodDescriptor> methods) {
         w.format("    private static volatile io.grpc.ServiceDescriptor serviceDescriptor;\n\n");
 
+        w.format("    /** Returns the service descriptor for the {@code %s} service. */\n",
+                grpcClassName.replace("Grpc", ""));
         w.format("    public static io.grpc.ServiceDescriptor getServiceDescriptor() {\n");
         w.format("        io.grpc.ServiceDescriptor result = serviceDescriptor;\n");
         w.format("        if (result == null) {\n");
@@ -417,6 +431,7 @@ public class LightProtoService {
     }
 
     private void generateBindService(PrintWriter w, List<ProtoMethodDescriptor> methods) {
+        w.println("    /** Binds the given {@code AsyncService} implementation and returns a {@code ServerServiceDefinition}. */");
         w.println("    public static io.grpc.ServerServiceDefinition bindService(AsyncService service) {");
         w.println("        return io.grpc.ServerServiceDefinition.builder(getServiceDescriptor())");
         for (ProtoMethodDescriptor m : methods) {
