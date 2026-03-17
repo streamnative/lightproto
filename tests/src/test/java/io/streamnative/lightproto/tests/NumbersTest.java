@@ -33,15 +33,6 @@ public class NumbersTest {
     private byte[] b2 = new byte[4096];
     private ByteBuf bb2 = Unpooled.wrappedBuffer(b2);
 
-    private static void assertException(Runnable r) {
-        try {
-            r.run();
-            fail("Should raise exception");
-        } catch (IllegalStateException e) {
-            // Expected
-        }
-    }
-
     @BeforeEach
     public void setup() {
         bb1.clear();
@@ -92,45 +83,19 @@ public class NumbersTest {
         assertEquals(pbn.hasXSint32(), parsed.hasXSint32());
         assertEquals(pbn.hasXSint64(), parsed.hasXSint64());
 
-        if (parsed.hasEnum1()) {
-            assertEquals(pbn.getEnum1().getNumber(), parsed.getEnum1().getValue());
-        }
-        if (parsed.hasEnum2()) {
-            assertEquals(pbn.getEnum2().getNumber(), parsed.getEnum2().getValue());
-        }
-        if (parsed.hasXBool()) {
-            assertEquals(pbn.getXBool(), parsed.isXBool());
-        }
-        if (parsed.hasXDouble()) {
-            assertEquals(pbn.getXDouble(), parsed.getXDouble());
-        }
-        if (parsed.hasXFixed32()) {
-            assertEquals(pbn.getXFixed32(), parsed.getXFixed32());
-        }
-        if (parsed.hasXFixed64()) {
-            assertEquals(pbn.getXFixed64(), parsed.getXFixed64());
-        }
-        if (parsed.hasXSfixed32()) {
-            assertEquals(pbn.getXSfixed32(), parsed.getXSfixed32());
-        }
-        if (parsed.hasXSfixed64()) {
-            assertEquals(pbn.getXSfixed64(), parsed.getXSfixed64());
-        }
-        if (parsed.hasXFloat()) {
-            assertEquals(pbn.getXFloat(), parsed.getXFloat());
-        }
-        if (parsed.hasXInt32()) {
-            assertEquals(pbn.getXInt32(), parsed.getXInt32());
-        }
-        if (parsed.hasXInt64()) {
-            assertEquals(pbn.getXInt64(), parsed.getXInt64());
-        }
-        if (parsed.hasXSint32()) {
-            assertEquals(pbn.getXSint32(), parsed.getXSint32());
-        }
-        if (parsed.hasXSint64()) {
-            assertEquals(pbn.getXSint64(), parsed.getXSint64());
-        }
+        assertEquals(pbn.getEnum1().getNumber(), parsed.getEnum1().getValue());
+        assertEquals(pbn.getEnum2().getNumber(), parsed.getEnum2().getValue());
+        assertEquals(pbn.getXBool(), parsed.isXBool());
+        assertEquals(pbn.getXDouble(), parsed.getXDouble());
+        assertEquals(pbn.getXFixed32(), parsed.getXFixed32());
+        assertEquals(pbn.getXFixed64(), parsed.getXFixed64());
+        assertEquals(pbn.getXSfixed32(), parsed.getXSfixed32());
+        assertEquals(pbn.getXSfixed64(), parsed.getXSfixed64());
+        assertEquals(pbn.getXFloat(), parsed.getXFloat());
+        assertEquals(pbn.getXInt32(), parsed.getXInt32());
+        assertEquals(pbn.getXInt64(), parsed.getXInt64());
+        assertEquals(pbn.getXSint32(), parsed.getXSint32());
+        assertEquals(pbn.getXSint64(), parsed.getXSint64());
     }
 
     @Test
@@ -155,22 +120,23 @@ public class NumbersTest {
         assertFalse(lpn.hasXSint32());
         assertFalse(lpn.hasXSint64());
 
-        assertException(() -> lpn.getEnum1());
-        assertException(() -> lpn.getEnum2());
-        assertException(() -> lpn.isXBool());
-        assertException(() -> lpn.getXDouble());
-        assertException(() -> lpn.getXFixed32());
-        assertException(() -> lpn.getXFixed64());
-        assertException(() -> lpn.getXSfixed32());
-        assertException(() -> lpn.getXSfixed64());
-        assertException(() -> lpn.getXFloat());
-        assertException(() -> lpn.getXInt32());
-        assertException(() -> lpn.getXInt64());
-        assertException(() -> lpn.getXInt32());
-        assertException(() -> lpn.getXUint64());
-        assertException(() -> lpn.getXUint32());
-        assertException(() -> lpn.getXSint32());
-        assertException(() -> lpn.getXSint64());
+        // Optional fields should return default values when not set (matching Protobuf behavior)
+        assertEquals(Enum1.valueOf(0), lpn.getEnum1());
+        assertEquals(Numbers.Enum2.valueOf(0), lpn.getEnum2());
+        assertEquals(false, lpn.isXBool());
+        assertEquals(0.0, lpn.getXDouble());
+        assertEquals(0, lpn.getXFixed32());
+        assertEquals(0L, lpn.getXFixed64());
+        assertEquals(0, lpn.getXSfixed32());
+        assertEquals(0L, lpn.getXSfixed64());
+        assertEquals(0.0f, lpn.getXFloat());
+        assertEquals(0, lpn.getXInt32());
+        assertEquals(0L, lpn.getXInt64());
+        assertEquals(0, lpn.getXInt32());
+        assertEquals(0L, lpn.getXUint64());
+        assertEquals(0, lpn.getXUint32());
+        assertEquals(0, lpn.getXSint32());
+        assertEquals(0L, lpn.getXSint64());
 
 
         lpn.setEnum1(Enum1.X1_1);
@@ -236,5 +202,75 @@ public class NumbersTest {
         assertEquals(-12L, lpn.getXSint64());
 
         verify(lpn, pbn.build());
+    }
+
+    @Test
+    public void testClearResetsAllFieldsToDefaults() throws Exception {
+        Numbers lpn = new Numbers();
+
+        // Set all fields to non-default values
+        lpn.setEnum1(Enum1.X1_2);
+        lpn.setEnum2(Numbers.Enum2.X2_2);
+        lpn.setXBool(true);
+        lpn.setXDouble(3.14);
+        lpn.setXFixed32(100);
+        lpn.setXFixed64(200L);
+        lpn.setXSfixed32(-100);
+        lpn.setXSfixed64(-200L);
+        lpn.setXFloat(2.71f);
+        lpn.setXInt32(42);
+        lpn.setXInt64(84L);
+        lpn.setXUint32(55);
+        lpn.setXUint64(110L);
+        lpn.setXSint32(-33);
+        lpn.setXSint64(-66L);
+
+        // Verify all fields are set
+        assertTrue(lpn.hasEnum1());
+        assertTrue(lpn.hasXBool());
+        assertTrue(lpn.hasXInt32());
+
+        lpn.clear();
+
+        // After clear, all has*() should return false
+        assertFalse(lpn.hasEnum1());
+        assertFalse(lpn.hasEnum2());
+        assertFalse(lpn.hasXBool());
+        assertFalse(lpn.hasXDouble());
+        assertFalse(lpn.hasXFixed32());
+        assertFalse(lpn.hasXFixed64());
+        assertFalse(lpn.hasXSfixed32());
+        assertFalse(lpn.hasXSfixed64());
+        assertFalse(lpn.hasXFloat());
+        assertFalse(lpn.hasXInt32());
+        assertFalse(lpn.hasXInt64());
+        assertFalse(lpn.hasXUint32());
+        assertFalse(lpn.hasXUint64());
+        assertFalse(lpn.hasXSint32());
+        assertFalse(lpn.hasXSint64());
+
+        // After clear, all getters should return default values (not old values)
+        assertEquals(Enum1.valueOf(0), lpn.getEnum1());
+        assertEquals(Numbers.Enum2.valueOf(0), lpn.getEnum2());
+        assertEquals(false, lpn.isXBool());
+        assertEquals(0.0, lpn.getXDouble());
+        assertEquals(0, lpn.getXFixed32());
+        assertEquals(0L, lpn.getXFixed64());
+        assertEquals(0, lpn.getXSfixed32());
+        assertEquals(0L, lpn.getXSfixed64());
+        assertEquals(0.0f, lpn.getXFloat());
+        assertEquals(0, lpn.getXInt32());
+        assertEquals(0L, lpn.getXInt64());
+        assertEquals(0, lpn.getXUint32());
+        assertEquals(0L, lpn.getXUint64());
+        assertEquals(0, lpn.getXSint32());
+        assertEquals(0L, lpn.getXSint64());
+
+        // Serialized size should be 0 after clear
+        assertEquals(0, lpn.getSerializedSize());
+
+        // Should serialize identically to a fresh empty protobuf message
+        NumbersOuterClass.Numbers pbn = NumbersOuterClass.Numbers.newBuilder().build();
+        verify(lpn, pbn);
     }
 }

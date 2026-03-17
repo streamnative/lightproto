@@ -109,6 +109,34 @@ public class BytesTest {
     }
 
     @Test
+    public void testAccessUnsetOptionalBytes() {
+        B lpb = new B();
+        assertFalse(lpb.hasPayload());
+
+        // Accessing unset optional bytes should return empty defaults, not throw
+        assertArrayEquals(new byte[0], lpb.getPayload());
+        assertEquals(0, lpb.getPayloadSize());
+        assertEquals(0, lpb.getPayloadSlice().readableBytes());
+    }
+
+    @Test
+    public void testClearResetsOptionalBytesToDefault() {
+        B lpb = new B();
+        lpb.setPayload(new byte[]{1, 2, 3});
+
+        assertTrue(lpb.hasPayload());
+        assertEquals(3, lpb.getPayloadSize());
+
+        lpb.clear();
+
+        assertFalse(lpb.hasPayload());
+        assertArrayEquals(new byte[0], lpb.getPayload());
+        assertEquals(0, lpb.getPayloadSize());
+        assertEquals(0, lpb.getPayloadSlice().readableBytes());
+        assertEquals(0, lpb.getSerializedSize());
+    }
+
+    @Test
     public void testRepeatedBytes() throws Exception {
         B lpb = new B();
         lpb.addExtraItem(new byte[]{1, 2, 3});

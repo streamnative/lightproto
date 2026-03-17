@@ -65,19 +65,19 @@ public class LightProtoBytesField extends LightProtoField {
     public void getter(PrintWriter w) {
         w.format("/** Returns the size in bytes of the {@code %s} field. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", ccName, "size"));
-        if (field.hasImplicitPresence()) {
-            w.format("    if (_%sLen < 0) { return 0; }\n", ccName);
-        } else {
+        if (field.isRequired()) {
             w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
             w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
             w.format("    }\n");
+        } else {
+            w.format("    if (_%sLen < 0) { return 0; }\n", ccName);
         }
         w.format("    return _%sLen;\n", ccName);
         w.format("}\n");
 
         w.format("/** Returns the {@code %s} field as a byte array. */\n", field.getName());
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
-        if (field.hasImplicitPresence()) {
+        if (!field.isRequired()) {
             w.format("    if (_%sLen < 0) { return new byte[0]; }\n", ccName);
         }
         w.format("    io.netty.buffer.ByteBuf _b = %s();\n", Util.camelCase("get", ccName, "slice"));
@@ -88,12 +88,12 @@ public class LightProtoBytesField extends LightProtoField {
 
         w.format("/** Returns the {@code %s} field as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
-        if (field.hasImplicitPresence()) {
-            w.format("    if (_%sLen < 0) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", ccName);
-        } else {
+        if (field.isRequired()) {
             w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
             w.format("        throw new IllegalStateException(\"Field '%s' is not set\");\n", field.getName());
             w.format("    }\n");
+        } else {
+            w.format("    if (_%sLen < 0) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", ccName);
         }
         w.format("    if (%s == null) {\n", ccName);
         w.format("        return _parsedBuffer.slice(_%sIdx, _%sLen);\n", ccName, ccName);

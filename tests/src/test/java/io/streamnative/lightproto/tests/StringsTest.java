@@ -102,6 +102,15 @@ public class StringsTest {
     }
 
     @Test
+    public void testAccessUnsetOptionalString() {
+        S lps = new S();
+        assertFalse(lps.hasId());
+
+        // Accessing an unset optional string should return empty string, not throw
+        assertEquals("", lps.getId());
+    }
+
+    @Test
     public void testClearStrings() throws Exception {
         S lps = new S();
         lps.addName("a");
@@ -114,5 +123,20 @@ public class StringsTest {
         assertEquals(2, lps.getNamesCount());
         assertEquals("d", lps.getNameAt(0));
         assertEquals("e", lps.getNameAt(1));
+    }
+
+    @Test
+    public void testClearResetsOptionalStringToDefault() throws Exception {
+        S lps = new S();
+        lps.setId("hello");
+        assertTrue(lps.hasId());
+        assertEquals("hello", lps.getId());
+
+        lps.clear();
+
+        assertFalse(lps.hasId());
+        assertEquals("", lps.getId());
+        assertEquals(0, lps.getNamesCount());
+        assertEquals(0, lps.getSerializedSize());
     }
 }

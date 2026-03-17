@@ -182,6 +182,72 @@ public class MessagesTest {
     }
 
     @Test
+    public void testAccessUnsetOptionalMessageReturnsDefault() {
+        M m = new M();
+        assertFalse(m.hasX());
+
+        // Accessing an unset optional message field should return an empty instance, not throw
+        X x = m.getX();
+        assertNotNull(x);
+
+        // The sub-message fields should also return defaults
+        assertFalse(x.hasA());
+        assertFalse(x.hasB());
+        assertEquals("", x.getA());
+        assertEquals("", x.getB());
+
+        // has() on the parent should still be false
+        assertFalse(m.hasX());
+
+        // Serialized size should be 0 (no fields set)
+        assertEquals(0, m.getSerializedSize());
+    }
+
+    @Test
+    public void testAccessUnsetNestedOptionalMessage() {
+        M m = new M();
+
+        // Add an item (with required k,v) but don't set the optional xx sub-message
+        m.addItem().setK("k1").setV("v1");
+
+        M.KV kv = m.getItemAt(0);
+        assertFalse(kv.hasXx());
+
+        // Accessing the unset optional nested message should return an empty instance
+        M.KV.XX xx = kv.getXx();
+        assertNotNull(xx);
+        assertEquals(0, xx.getN());
+    }
+
+    @Test
+    public void testClearResetsSubMessageFields() throws Exception {
+        M m = new M();
+        m.setX().setA("hello").setB("world");
+        m.addItem().setK("k1").setV("v1").setXx().setN(42);
+
+        assertTrue(m.hasX());
+        assertEquals("hello", m.getX().getA());
+        assertEquals(1, m.getItemsCount());
+
+        m.clear();
+
+        // After clear, optional message field should not be set
+        assertFalse(m.hasX());
+
+        // Accessing after clear should return an empty default instance
+        X x = m.getX();
+        assertNotNull(x);
+        assertEquals("", x.getA());
+        assertEquals("", x.getB());
+
+        // Repeated fields should be empty
+        assertEquals(0, m.getItemsCount());
+
+        // Serialized size should be 0
+        assertEquals(0, m.getSerializedSize());
+    }
+
+    @Test
     public void testByteArrays() throws Exception {
         M lp1 = new M();
         lp1.setX()

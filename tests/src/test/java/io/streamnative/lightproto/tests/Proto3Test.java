@@ -163,6 +163,49 @@ public class Proto3Test {
         assertEquals(42, parsed.getNested().getValue());
     }
 
+    @Test
+    public void testAccessUnsetMessageFieldReturnsDefault() {
+        Proto3Message msg = new Proto3Message();
+        assertFalse(msg.hasNested());
+
+        // Accessing unset message field should return an empty instance, not throw
+        Proto3Nested nested = msg.getNested();
+        assertNotNull(nested);
+        assertEquals("", nested.getLabel());
+        assertEquals(0, nested.getValue());
+
+        // has() should still be false
+        assertFalse(msg.hasNested());
+    }
+
+    @Test
+    public void testClearResetsNestedMessageField() {
+        Proto3Message msg = new Proto3Message();
+        msg.setNested().setLabel("test").setValue(42);
+        msg.setIntField(99);
+        msg.setStringField("hello");
+        msg.setOptInt(7);
+
+        assertTrue(msg.hasNested());
+        assertTrue(msg.hasOptInt());
+
+        msg.clear();
+
+        // All fields should be reset
+        assertFalse(msg.hasNested());
+        assertFalse(msg.hasOptInt());
+        assertEquals(0, msg.getIntField());
+        assertEquals("", msg.getStringField());
+
+        // Accessing nested after clear should return empty default
+        Proto3Nested nested = msg.getNested();
+        assertNotNull(nested);
+        assertEquals("", nested.getLabel());
+        assertEquals(0, nested.getValue());
+
+        assertEquals(0, msg.getSerializedSize());
+    }
+
     // --- Oneof ---
 
     @Test
