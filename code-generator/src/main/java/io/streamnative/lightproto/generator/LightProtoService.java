@@ -144,7 +144,8 @@ public class LightProtoService {
         w.println("                        io.netty.buffer.ByteBuf buf =");
         w.println("                                (io.netty.buffer.ByteBuf) BYTE_BUF_INPUT_STREAM_BUFFER.get(stream);");
         w.println("                        T msg = factory.get();");
-        w.println("                        msg.parseFrom(buf, buf.readableBytes(), true);");
+        w.println("                        msg.parseFrom(buf, buf.readableBytes());");
+        w.println("                        msg.materialize();");
         w.println("                        return msg;");
         w.println("                    }");
         w.println("                    T msg = factory.get();");

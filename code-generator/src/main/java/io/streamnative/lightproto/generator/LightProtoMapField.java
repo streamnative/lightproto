@@ -752,7 +752,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("}\n");
         } else if (isMessageValue()) {
             w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-            w.format("    _%sValues[_i]._materialize();\n", ccName);
+            w.format("    _%sValues[_i].materialize();\n", ccName);
             w.format("}\n");
         }
     }

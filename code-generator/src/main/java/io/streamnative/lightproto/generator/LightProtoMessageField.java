@@ -89,7 +89,7 @@ public class LightProtoMessageField extends LightProtoField {
     @Override
     public void materialize(PrintWriter w) {
         w.format("if (%s()) {\n", Util.camelCase("has", ccName));
-        w.format("    %s._materialize();\n", ccName);
+        w.format("    %s.materialize();\n", ccName);
         w.format("}\n");
     }
 
