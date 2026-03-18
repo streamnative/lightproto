@@ -18,12 +18,15 @@ package io.streamnative.lightproto.generator;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 
-@SuppressWarnings({"sunapi", "removal"})
 class LightProtoCodec {
 
-    static final sun.misc.Unsafe UNSAFE;
+    private static final boolean HAS_UNSAFE;
     private static final long STRING_VALUE_OFFSET;
     static final long BYTE_ARRAY_BASE_OFFSET;
     static final boolean LITTLE_ENDIAN = java.nio.ByteOrder.nativeOrder() == java.nio.ByteOrder.LITTLE_ENDIAN;
@@ -32,29 +35,84 @@ class LightProtoCodec {
     // and we must not use the Unsafe string fast paths.
     private static final boolean COMPACT_STRINGS;
 
+    // MethodHandles for Unsafe operations, resolved via reflection to avoid
+    // referencing sun.misc.Unsafe as a type (which triggers javac warnings).
+    // HotSpot inlines invokeExact on static final MethodHandles.
+    private static final MethodHandle MH_PUT_BYTE;
+    private static final MethodHandle MH_PUT_INT;
+    private static final MethodHandle MH_PUT_LONG;
+    private static final MethodHandle MH_GET_OBJECT;
+    private static final MethodHandle MH_PUT_OBJECT;
+    private static final MethodHandle MH_COPY_MEMORY;
+    private static final MethodHandle MH_GET_LONG;
+    private static final MethodHandle MH_ALLOCATE_INSTANCE;
+
     static {
-        sun.misc.Unsafe unsafe = null;
+        boolean hasUnsafe = false;
         long offset = -1;
         long arrayBase = -1;
         boolean compactStrings = false;
+        MethodHandle mhPutByte = null;
+        MethodHandle mhPutInt = null;
+        MethodHandle mhPutLong = null;
+        MethodHandle mhGetObject = null;
+        MethodHandle mhPutObject = null;
+        MethodHandle mhCopyMemory = null;
+        MethodHandle mhGetLong = null;
+        MethodHandle mhAllocateInstance = null;
         try {
-            java.lang.reflect.Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+            Field f = unsafeClass.getDeclaredField("theUnsafe");
             f.setAccessible(true);
-            unsafe = (sun.misc.Unsafe) f.get(null);
-            offset = unsafe.objectFieldOffset(String.class.getDeclaredField("value"));
-            arrayBase = unsafe.arrayBaseOffset(byte[].class);
+            Object unsafe = f.get(null);
+
+            // Use reflection for init-only operations
+            Method objectFieldOffset = unsafeClass.getMethod("objectFieldOffset", Field.class);
+            Method arrayBaseOffsetMethod = unsafeClass.getMethod("arrayBaseOffset", Class.class);
+            Method getObjectMethod = unsafeClass.getMethod("getObject", Object.class, long.class);
+
+            offset = (long) objectFieldOffset.invoke(unsafe, String.class.getDeclaredField("value"));
+            arrayBase = (int) arrayBaseOffsetMethod.invoke(unsafe, byte[].class);
             // Detect compact strings: an ASCII string's internal byte[] length
             // equals the string length when compact strings are enabled (LATIN1 coder),
             // but is 2x the string length when disabled (UTF-16 coder).
-            byte[] testValue = (byte[]) unsafe.getObject("a", offset);
+            byte[] testValue = (byte[]) getObjectMethod.invoke(unsafe, "a", offset);
             compactStrings = (testValue.length == 1);
-        } catch (NoSuchFieldException | IllegalAccessException ignore) {
+
+            // Create MethodHandles for hot-path operations, bound to the Unsafe instance
+            MethodHandles.Lookup lookup = MethodHandles.lookup();
+            mhPutByte = lookup.unreflect(
+                    unsafeClass.getMethod("putByte", Object.class, long.class, byte.class)).bindTo(unsafe);
+            mhPutInt = lookup.unreflect(
+                    unsafeClass.getMethod("putInt", Object.class, long.class, int.class)).bindTo(unsafe);
+            mhPutLong = lookup.unreflect(
+                    unsafeClass.getMethod("putLong", Object.class, long.class, long.class)).bindTo(unsafe);
+            mhGetObject = lookup.unreflect(getObjectMethod).bindTo(unsafe);
+            mhPutObject = lookup.unreflect(
+                    unsafeClass.getMethod("putObject", Object.class, long.class, Object.class)).bindTo(unsafe);
+            mhCopyMemory = lookup.unreflect(
+                    unsafeClass.getMethod("copyMemory", Object.class, long.class, Object.class, long.class, long.class))
+                    .bindTo(unsafe);
+            mhGetLong = lookup.unreflect(
+                    unsafeClass.getMethod("getLong", Object.class, long.class)).bindTo(unsafe);
+            mhAllocateInstance = lookup.unreflect(
+                    unsafeClass.getMethod("allocateInstance", Class.class)).bindTo(unsafe);
+            hasUnsafe = true;
+        } catch (Throwable ignore) {
             // Fallback to non-Unsafe path
         }
-        UNSAFE = unsafe;
+        HAS_UNSAFE = hasUnsafe;
         STRING_VALUE_OFFSET = offset;
         BYTE_ARRAY_BASE_OFFSET = arrayBase;
         COMPACT_STRINGS = compactStrings;
+        MH_PUT_BYTE = mhPutByte;
+        MH_PUT_INT = mhPutInt;
+        MH_PUT_LONG = mhPutLong;
+        MH_GET_OBJECT = mhGetObject;
+        MH_PUT_OBJECT = mhPutObject;
+        MH_COPY_MEMORY = mhCopyMemory;
+        MH_GET_LONG = mhGetLong;
+        MH_ALLOCATE_INSTANCE = mhAllocateInstance;
     }
 
     static final int TAG_TYPE_MASK = 7;
@@ -322,9 +380,13 @@ class LightProtoCodec {
             // then writeBytes in a single copy with zero intermediate allocation.
             // On JDK 9+ compact strings, ASCII strings use LATIN1 coder and the
             // internal value byte[] contains exactly the bytes we need.
-            if (UNSAFE != null && COMPACT_STRINGS) {
-                byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
-                b.writeBytes(value, 0, bytesCount);
+            if (HAS_UNSAFE && COMPACT_STRINGS) {
+                try {
+                    Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
+                    b.writeBytes((byte[]) _v, 0, bytesCount);
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
             } else {
                 b.writeBytes(s.getBytes(StandardCharsets.ISO_8859_1));
             }
@@ -338,33 +400,45 @@ class LightProtoCodec {
     // Used by generated writeTo() methods after a single ensureWritable() call.
 
     static long writeRawByte(Object base, long addr, int value) {
-        UNSAFE.putByte(base, addr, (byte) value);
+        try {
+            MH_PUT_BYTE.invokeExact(base, addr, (byte) value);
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
         return addr + 1;
     }
 
     static long writeRawVarInt(Object base, long addr, int n) {
-        if (n >= 0) {
-            while (true) {
-                if ((n & ~0x7F) == 0) {
-                    UNSAFE.putByte(base, addr++, (byte) n);
-                    return addr;
+        try {
+            if (n >= 0) {
+                while (true) {
+                    if ((n & ~0x7F) == 0) {
+                        MH_PUT_BYTE.invokeExact(base, addr++, (byte) n);
+                        return addr;
+                    }
+                    MH_PUT_BYTE.invokeExact(base, addr++, (byte) ((n & 0x7F) | 0x80));
+                    n >>>= 7;
                 }
-                UNSAFE.putByte(base, addr++, (byte) ((n & 0x7F) | 0x80));
-                n >>>= 7;
+            } else {
+                return writeRawVarInt64(base, addr, n);
             }
-        } else {
-            return writeRawVarInt64(base, addr, n);
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
     }
 
     static long writeRawVarInt64(Object base, long addr, long value) {
-        while (true) {
-            if ((value & ~0x7FL) == 0) {
-                UNSAFE.putByte(base, addr++, (byte) value);
-                return addr;
+        try {
+            while (true) {
+                if ((value & ~0x7FL) == 0) {
+                    MH_PUT_BYTE.invokeExact(base, addr++, (byte) value);
+                    return addr;
+                }
+                MH_PUT_BYTE.invokeExact(base, addr++, (byte) (((int) value & 0x7F) | 0x80));
+                value >>>= 7;
             }
-            UNSAFE.putByte(base, addr++, (byte) (((int) value & 0x7F) | 0x80));
-            value >>>= 7;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
     }
 
@@ -377,12 +451,20 @@ class LightProtoCodec {
     }
 
     static long writeRawLittleEndian32(Object base, long addr, int value) {
-        UNSAFE.putInt(base, addr, LITTLE_ENDIAN ? value : Integer.reverseBytes(value));
+        try {
+            MH_PUT_INT.invokeExact(base, addr, LITTLE_ENDIAN ? value : Integer.reverseBytes(value));
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
         return addr + 4;
     }
 
     static long writeRawLittleEndian64(Object base, long addr, long value) {
-        UNSAFE.putLong(base, addr, LITTLE_ENDIAN ? value : Long.reverseBytes(value));
+        try {
+            MH_PUT_LONG.invokeExact(base, addr, LITTLE_ENDIAN ? value : Long.reverseBytes(value));
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
+        }
         return addr + 8;
     }
 
@@ -400,61 +482,74 @@ class LightProtoCodec {
      */
     static long writeRawString(Object base, long addr, String s, int bytesCount) {
         if (COMPACT_STRINGS && s.length() == bytesCount) {
-            byte[] value = (byte[]) UNSAFE.getObject(s, STRING_VALUE_OFFSET);
-            UNSAFE.copyMemory(value, BYTE_ARRAY_BASE_OFFSET, base, addr, bytesCount);
+            try {
+                Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
+                MH_COPY_MEMORY.invokeExact((Object) _v, BYTE_ARRAY_BASE_OFFSET, base, addr, (long) bytesCount);
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
             return addr + bytesCount;
         }
         return -1;
     }
 
     static String readString(ByteBuf b, int index, int len) {
-        if (UNSAFE != null && STRING_VALUE_OFFSET >= 0) {
-            // Allocate target byte[] and copy directly from ByteBuf memory,
-            // bypassing Netty's getBytes chain (checkIndex, checkRangeBounds, etc.)
-            byte[] value = new byte[len];
-            if (b.hasMemoryAddress()) {
-                UNSAFE.copyMemory(null, b.memoryAddress() + index, value, BYTE_ARRAY_BASE_OFFSET, len);
-            } else if (b.hasArray()) {
-                UNSAFE.copyMemory(b.array(), BYTE_ARRAY_BASE_OFFSET + b.arrayOffset() + index,
-                        value, BYTE_ARRAY_BASE_OFFSET, len);
-            } else {
-                b.getBytes(index, value, 0, len);
-            }
-
-            // For ASCII strings (all bytes < 128), create a String directly via Unsafe,
-            // injecting the byte[] as the internal value with LATIN1 coder (0).
-            // This eliminates the second copy that new String() would do.
-            // Only possible when compact strings are enabled (-XX:+CompactStrings, the default).
-            if (COMPACT_STRINGS && _isAscii(value, len)) {
-                try {
-                    String s = (String) UNSAFE.allocateInstance(String.class);
-                    UNSAFE.putObject(s, STRING_VALUE_OFFSET, value);
-                    // coder=0 (LATIN1) is already set by zero-initialization from allocateInstance
-                    return s;
-                } catch (InstantiationException e) {
-                    // fall through to standard path
+        if (HAS_UNSAFE && STRING_VALUE_OFFSET >= 0) {
+            try {
+                // Allocate target byte[] and copy directly from ByteBuf memory,
+                // bypassing Netty's getBytes chain (checkIndex, checkRangeBounds, etc.)
+                byte[] value = new byte[len];
+                if (b.hasMemoryAddress()) {
+                    MH_COPY_MEMORY.invokeExact((Object) null, b.memoryAddress() + index,
+                            (Object) value, BYTE_ARRAY_BASE_OFFSET, (long) len);
+                } else if (b.hasArray()) {
+                    MH_COPY_MEMORY.invokeExact((Object) b.array(),
+                            BYTE_ARRAY_BASE_OFFSET + b.arrayOffset() + index,
+                            (Object) value, BYTE_ARRAY_BASE_OFFSET, (long) len);
+                } else {
+                    b.getBytes(index, value, 0, len);
                 }
-            }
 
-            // Non-ASCII or compact strings disabled: decode properly
-            return new String(value, 0, len, StandardCharsets.UTF_8);
+                // For ASCII strings (all bytes < 128), create a String directly via Unsafe,
+                // injecting the byte[] as the internal value with LATIN1 coder (0).
+                // This eliminates the second copy that new String() would do.
+                // Only possible when compact strings are enabled (-XX:+CompactStrings, the default).
+                if (COMPACT_STRINGS && _isAscii(value, len)) {
+                    Object _s = (Object) MH_ALLOCATE_INSTANCE.invokeExact(String.class);
+                    MH_PUT_OBJECT.invokeExact(_s, STRING_VALUE_OFFSET, (Object) value);
+                    // coder=0 (LATIN1) is already set by zero-initialization from allocateInstance
+                    return (String) _s;
+                }
+
+                // Non-ASCII or compact strings disabled: decode properly
+                return new String(value, 0, len, StandardCharsets.UTF_8);
+            } catch (RuntimeException | Error e) {
+                throw e;
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
         }
         return b.toString(index, len, StandardCharsets.UTF_8);
     }
 
     private static boolean _isAscii(byte[] bytes, int len) {
-        // Check 8 bytes at a time using long reads — data is in L1 cache from the copy
-        int i = 0;
-        for (; i + 7 < len; i += 8) {
-            if ((UNSAFE.getLong(bytes, BYTE_ARRAY_BASE_OFFSET + i) & 0x8080808080808080L) != 0) {
-                return false;
+        try {
+            // Check 8 bytes at a time using long reads — data is in L1 cache from the copy
+            int i = 0;
+            for (; i + 7 < len; i += 8) {
+                if (((long) MH_GET_LONG.invokeExact((Object) bytes, BYTE_ARRAY_BASE_OFFSET + i)
+                        & 0x8080808080808080L) != 0) {
+                    return false;
+                }
             }
+            // Check remaining bytes
+            for (; i < len; i++) {
+                if (bytes[i] < 0) return false;
+            }
+            return true;
+        } catch (Throwable t) {
+            throw new RuntimeException(t);
         }
-        // Check remaining bytes
-        for (; i < len; i++) {
-            if (bytes[i] < 0) return false;
-        }
-        return true;
     }
 
     static void skipUnknownField(int tag, ByteBuf buffer) {
