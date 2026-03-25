@@ -49,6 +49,9 @@ public class LightProtoService {
         // ByteBufInputStream reflection field for zero-copy deserialization
         generateByteBufInputStreamField(w);
 
+        // Drainable InputStream for efficient writes into gRPC framer
+        generateDrainableByteArrayInputStream(w);
+
         // Marshaller factory method
         generateMarshallerFactory(w);
 
@@ -127,6 +130,26 @@ public class LightProtoService {
         w.println("    }\n");
     }
 
+    private void generateDrainableByteArrayInputStream(PrintWriter w) {
+        w.println("    private static final class DrainableByteArrayInputStream");
+        w.println("            extends java.io.ByteArrayInputStream");
+        w.println("            implements io.grpc.Drainable, io.grpc.KnownLength {");
+        w.println("        DrainableByteArrayInputStream(byte[] buf, int offset, int length) {");
+        w.println("            super(buf, offset, length);");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public int drainTo(java.io.OutputStream target) throws java.io.IOException {");
+        w.println("            int count = this.count - this.pos;");
+        w.println("            if (count > 0) {");
+        w.println("                target.write(this.buf, this.pos, count);");
+        w.println("                this.pos = this.count;");
+        w.println("            }");
+        w.println("            return count;");
+        w.println("        }");
+        w.println("    }\n");
+    }
+
     private void generateMarshallerFactory(PrintWriter w) {
         w.println("    private static <T extends LightProtoCodec.LightProtoMessage> io.grpc.MethodDescriptor.Marshaller<T> marshaller(");
         w.println("            java.util.function.Supplier<T> factory) {");
@@ -134,9 +157,9 @@ public class LightProtoService {
         w.println("            @Override");
         w.println("            public java.io.InputStream stream(T value) {");
         w.println("                int size = value.getSerializedSize();");
-        w.println("                io.netty.buffer.ByteBuf buf = io.netty.buffer.PooledByteBufAllocator.DEFAULT.directBuffer(size);");
+        w.println("                io.netty.buffer.ByteBuf buf = io.netty.buffer.Unpooled.buffer(size, size);");
         w.println("                value.writeTo(buf);");
-        w.println("                return new io.netty.buffer.ByteBufInputStream(buf, true);");
+        w.println("                return new DrainableByteArrayInputStream(buf.array(), 0, buf.readableBytes());");
         w.println("            }");
         w.println("            @Override");
         w.println("            public T parse(java.io.InputStream stream) {");
