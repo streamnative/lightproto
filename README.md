@@ -10,6 +10,7 @@ High-performance Protocol Buffers code generator for Java, optimized for seriali
 - **Zero heap allocations** — reusable mutable objects, no Builder pattern overhead
 - **Lazy string/bytes deserialization** — decoded only on access
 - **Optimized string handling** — single-copy ASCII fast path via `sun.misc.Unsafe`
+- **Protobuf-compatible JSON serialization** — generated `writeJsonTo(ByteBuf)` / `toJson()` methods
 - **No runtime dependencies** — generated code is self-contained
 - **Maven and Gradle plugins** for seamless build integration
 
@@ -23,7 +24,7 @@ Add the Maven plugin to your `pom.xml`:
 <plugin>
     <groupId>io.streamnative.lightproto</groupId>
     <artifactId>lightproto-maven-plugin</artifactId>
-    <version>0.5-SNAPSHOT</version>
+    <version>0.6.4</version>
     <executions>
         <execution>
             <goals>
@@ -43,7 +44,7 @@ Add the plugin to your `build.gradle`:
 
 ```groovy
 plugins {
-    id 'io.streamnative.lightproto' version '0.5-SNAPSHOT'
+    id 'io.streamnative.lightproto' version '0.6.4'
 }
 ```
 
@@ -55,7 +56,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.5-SNAPSHOT'
+        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.6.4'
     }
 }
 
@@ -98,6 +99,24 @@ parsed.parseFrom(buf, buf.readableBytes());
 md.clear();
 md.setProducerName("producer-2")...
 ```
+
+### JSON Serialization
+
+Every generated message has built-in JSON serialization that produces output compatible with
+protobuf's [`JsonFormat`](https://protobuf.dev/programming-guides/json/):
+
+```java
+// Serialize to JSON string
+String json = md.toJson();
+// {"producerName":"producer-1","sequenceId":"12345","publishTime":"1711234567890",...}
+
+// Or write directly to a ByteBuf for zero-copy networking
+ByteBuf jsonBuf = PooledByteBufAllocator.DEFAULT.buffer();
+md.writeJsonTo(jsonBuf);
+```
+
+The JSON encoding follows protobuf conventions: lowerCamelCase field names, int64 values quoted
+as strings, enum values as names, and bytes fields as base64.
 
 ### gRPC Integration
 
@@ -182,6 +201,7 @@ client streaming, and bidirectional streaming.
 | Default values | ✅ | — |
 | Multiple `.proto` files / `import` | ✅ | ✅ |
 | `service` / RPC definitions (gRPC stubs) | ✅ | ✅ |
+| JSON serialization (`writeJsonTo` / `toJson`) | ✅ | ✅ |
 | Extensions | ❌ | — |
 | `Any`, `Timestamp`, well-known types | ❌ | ❌ |
 | `group` (deprecated) | ❌ | — |
