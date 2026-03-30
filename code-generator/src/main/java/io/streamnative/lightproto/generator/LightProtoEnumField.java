@@ -77,6 +77,16 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + %s.getValue();\n", ccName);
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName + ".getValue() != 0";
     }

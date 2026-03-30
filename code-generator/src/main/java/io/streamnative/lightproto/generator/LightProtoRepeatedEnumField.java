@@ -31,6 +31,14 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
         w.format("}\n");
     }
 
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + _%sCount;\n", pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    _h = 31 * _h + %s[_i].getValue();\n", pluralName);
+        w.format("}\n");
+    }
+
     public void parsePacked(PrintWriter w) {
         w.format("int _%s = LightProtoCodec.readVarInt(_buffer);\n", Util.camelCase(singularName, "size"));
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));

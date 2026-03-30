@@ -221,6 +221,41 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (_%sCount != _other._%sCount) return false;\n", pluralName, pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("    if (Float.floatToIntBits(%s[_i]) != Float.floatToIntBits(_other.%s[_i])) return false;\n", pluralName, pluralName);
+        } else if (type.equals("double")) {
+            w.format("    if (Double.doubleToLongBits(%s[_i]) != Double.doubleToLongBits(_other.%s[_i])) return false;\n", pluralName, pluralName);
+        } else {
+            w.format("    if (%s[_i] != _other.%s[_i]) return false;\n", pluralName, pluralName);
+        }
+        w.format("}\n");
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + _%sCount;\n", pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        String type = field.getProtoType();
+        if (type.equals("bool")) {
+            w.format("    _h = 31 * _h + (%s[_i] ? 1231 : 1237);\n", pluralName);
+        } else if (type.equals("float")) {
+            w.format("    _h = 31 * _h + Float.floatToIntBits(%s[_i]);\n", pluralName);
+        } else if (type.equals("double")) {
+            w.format("    _h = 31 * _h + Long.hashCode(Double.doubleToLongBits(%s[_i]));\n", pluralName);
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("    _h = 31 * _h + Long.hashCode(%s[_i]);\n", pluralName);
+        } else {
+            w.format("    _h = 31 * _h + %s[_i];\n", pluralName);
+        }
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return LightProtoNumberField.typeTag(field);
     }

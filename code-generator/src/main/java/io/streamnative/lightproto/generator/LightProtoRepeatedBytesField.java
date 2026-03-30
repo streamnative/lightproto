@@ -197,6 +197,24 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (_%sCount != _other._%sCount) return false;\n", pluralName, pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    if (!io.netty.buffer.ByteBufUtil.equals(%s(_i), _other.%s(_i))) return false;\n",
+                Util.camelCase("get", singularName, "slice", "at"), Util.camelCase("get", singularName, "slice", "at"));
+        w.format("}\n");
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + _%sCount;\n", pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    _h = 31 * _h + io.netty.buffer.ByteBufUtil.hashCode(%s(_i));\n",
+                Util.camelCase("get", singularName, "slice", "at"));
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

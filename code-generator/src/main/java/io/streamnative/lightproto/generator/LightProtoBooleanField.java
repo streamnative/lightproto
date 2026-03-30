@@ -56,6 +56,16 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + (%s ? 1231 : 1237);\n", ccName);
+    }
+
+    @Override
     protected String nonDefaultCondition() {
         return ccName;
     }

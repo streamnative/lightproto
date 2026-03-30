@@ -870,6 +870,113 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (_%sCount != _other._%sCount) return false;\n", ccName, ccName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+
+        // Resolve key
+        if (isStringKey()) {
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("    if (_ksh.s == null) {\n");
+            w.format("        _ksh.s = LightProtoCodec.readString(_parsedBuffer, _ksh.idx, _ksh.len);\n");
+            w.format("    }\n");
+            w.format("    int _oIdx = _other._find%sKeyIndex(_ksh.s);\n", Util.camelCaseFirstUpper(ccName));
+        } else {
+            w.format("    int _oIdx = _other._find%sKeyIndex(_%sKeys[_i]);\n", Util.camelCaseFirstUpper(ccName), ccName);
+        }
+        w.format("    if (_oIdx < 0) return false;\n");
+
+        // Compare values
+        if (isStringValue()) {
+            w.format("    LightProtoCodec.StringHolder _vsh1 = _%sValues[_i];\n", ccName);
+            w.format("    if (_vsh1.s == null) { _vsh1.s = LightProtoCodec.readString(_parsedBuffer, _vsh1.idx, _vsh1.len); }\n");
+            w.format("    LightProtoCodec.StringHolder _vsh2 = _other._%sValues[_oIdx];\n", ccName);
+            w.format("    if (_vsh2.s == null) { _vsh2.s = LightProtoCodec.readString(_other._parsedBuffer, _vsh2.idx, _vsh2.len); }\n");
+            w.format("    if (!java.util.Objects.equals(_vsh1.s, _vsh2.s)) return false;\n");
+        } else if (isBytesValue()) {
+            w.format("    LightProtoCodec.BytesHolder _vbh1 = _%sValues[_i];\n", ccName);
+            w.format("    io.netty.buffer.ByteBuf _bs1 = _vbh1.b != null ? _vbh1.b.slice(0, _vbh1.len) : _parsedBuffer.slice(_vbh1.idx, _vbh1.len);\n");
+            w.format("    LightProtoCodec.BytesHolder _vbh2 = _other._%sValues[_oIdx];\n", ccName);
+            w.format("    io.netty.buffer.ByteBuf _bs2 = _vbh2.b != null ? _vbh2.b.slice(0, _vbh2.len) : _other._parsedBuffer.slice(_vbh2.idx, _vbh2.len);\n");
+            w.format("    if (!io.netty.buffer.ByteBufUtil.equals(_bs1, _bs2)) return false;\n");
+        } else if (isMessageValue()) {
+            w.format("    if (!_%sValues[_i].equals(_other._%sValues[_oIdx])) return false;\n", ccName, ccName);
+        } else if (isEnumValue()) {
+            w.format("    if (_%sValues[_i] != _other._%sValues[_oIdx]) return false;\n", ccName, ccName);
+        } else {
+            // Primitive values (int, long, float, double, bool)
+            String type = valueField.getProtoType();
+            if (type.equals("float")) {
+                w.format("    if (Float.floatToIntBits(_%sValues[_i]) != Float.floatToIntBits(_other._%sValues[_oIdx])) return false;\n", ccName, ccName);
+            } else if (type.equals("double")) {
+                w.format("    if (Double.doubleToLongBits(_%sValues[_i]) != Double.doubleToLongBits(_other._%sValues[_oIdx])) return false;\n", ccName, ccName);
+            } else {
+                w.format("    if (_%sValues[_i] != _other._%sValues[_oIdx]) return false;\n", ccName, ccName);
+            }
+        }
+
+        w.format("}\n");
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        // Order-independent hash: sum the hash of each entry
+        w.format("int _%sHash = 0;\n", ccName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+        w.format("    int _eH = 0;\n");
+
+        // Hash key
+        if (isStringKey()) {
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("    if (_ksh.s == null) { _ksh.s = LightProtoCodec.readString(_parsedBuffer, _ksh.idx, _ksh.len); }\n");
+            w.format("    _eH = 31 * _eH + _ksh.s.hashCode();\n");
+        } else {
+            String keyType = keyField.getProtoType();
+            if (keyType.equals("int64") || keyType.equals("uint64") || keyType.equals("sint64")
+                    || keyType.equals("fixed64") || keyType.equals("sfixed64")) {
+                w.format("    _eH = 31 * _eH + Long.hashCode(_%sKeys[_i]);\n", ccName);
+            } else if (keyType.equals("bool")) {
+                w.format("    _eH = 31 * _eH + (_%sKeys[_i] ? 1231 : 1237);\n", ccName);
+            } else {
+                w.format("    _eH = 31 * _eH + _%sKeys[_i];\n", ccName);
+            }
+        }
+
+        // Hash value
+        if (isStringValue()) {
+            w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[_i];\n", ccName);
+            w.format("    if (_vsh.s == null) { _vsh.s = LightProtoCodec.readString(_parsedBuffer, _vsh.idx, _vsh.len); }\n");
+            w.format("    _eH = 31 * _eH + _vsh.s.hashCode();\n");
+        } else if (isBytesValue()) {
+            w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
+            w.format("    io.netty.buffer.ByteBuf _bs = _vbh.b != null ? _vbh.b.slice(0, _vbh.len) : _parsedBuffer.slice(_vbh.idx, _vbh.len);\n");
+            w.format("    _eH = 31 * _eH + io.netty.buffer.ByteBufUtil.hashCode(_bs);\n");
+        } else if (isMessageValue()) {
+            w.format("    _eH = 31 * _eH + _%sValues[_i].hashCode();\n", ccName);
+        } else if (isEnumValue()) {
+            w.format("    _eH = 31 * _eH + _%sValues[_i].getValue();\n", ccName);
+        } else {
+            String valType = valueField.getProtoType();
+            if (valType.equals("float")) {
+                w.format("    _eH = 31 * _eH + Float.floatToIntBits(_%sValues[_i]);\n", ccName);
+            } else if (valType.equals("double")) {
+                w.format("    _eH = 31 * _eH + Long.hashCode(Double.doubleToLongBits(_%sValues[_i]));\n", ccName);
+            } else if (valType.equals("int64") || valType.equals("uint64") || valType.equals("sint64")
+                    || valType.equals("fixed64") || valType.equals("sfixed64")) {
+                w.format("    _eH = 31 * _eH + Long.hashCode(_%sValues[_i]);\n", ccName);
+            } else if (valType.equals("bool")) {
+                w.format("    _eH = 31 * _eH + (_%sValues[_i] ? 1231 : 1237);\n", ccName);
+            } else {
+                w.format("    _eH = 31 * _eH + _%sValues[_i];\n", ccName);
+            }
+        }
+
+        w.format("    _%sHash += _eH;\n", ccName);
+        w.format("}\n");
+        w.format("_h = 31 * _h + _%sHash;\n", ccName);
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

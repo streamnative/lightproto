@@ -165,6 +165,22 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (_%sCount != _other._%sCount) return false;\n", pluralName, pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    if (!%s[_i].equals(_other.%s[_i])) return false;\n", pluralName, pluralName);
+        w.format("}\n");
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + _%sCount;\n", pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    _h = 31 * _h + %s[_i].hashCode();\n", pluralName);
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

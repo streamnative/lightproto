@@ -286,6 +286,33 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("if (Float.floatToIntBits(%s) != Float.floatToIntBits(_other.%s)) return false;\n", ccName, ccName);
+        } else if (type.equals("double")) {
+            w.format("if (Double.doubleToLongBits(%s) != Double.doubleToLongBits(_other.%s)) return false;\n", ccName, ccName);
+        } else {
+            w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
+        }
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("_h = 31 * _h + Float.floatToIntBits(%s);\n", ccName);
+        } else if (type.equals("double")) {
+            w.format("_h = 31 * _h + Long.hashCode(Double.doubleToLongBits(%s));\n", ccName);
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("_h = 31 * _h + Long.hashCode(%s);\n", ccName);
+        } else {
+            w.format("_h = 31 * _h + %s;\n", ccName);
+        }
+    }
+
+    @Override
     protected String typeTag() {
         return typeTag(field);
     }

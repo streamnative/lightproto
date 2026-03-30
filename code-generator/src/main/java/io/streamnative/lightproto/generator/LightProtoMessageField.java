@@ -110,6 +110,16 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (!%s.equals(_other.%s)) return false;\n", ccName, ccName);
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + %s.hashCode();\n", ccName);
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

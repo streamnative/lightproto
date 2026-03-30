@@ -198,6 +198,24 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (_%sCount != _other._%sCount) return false;\n", pluralName, pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    if (!java.util.Objects.equals(%s(_i), _other.%s(_i))) return false;\n",
+                Util.camelCase("get", singularName, "at"), Util.camelCase("get", singularName, "at"));
+        w.format("}\n");
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + _%sCount;\n", pluralName);
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", pluralName);
+        w.format("    _h = 31 * _h + java.util.Objects.hashCode(%s(_i));\n",
+                Util.camelCase("get", singularName, "at"));
+        w.format("}\n");
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

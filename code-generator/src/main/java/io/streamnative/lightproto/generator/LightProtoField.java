@@ -147,6 +147,19 @@ public abstract class LightProtoField {
     abstract public void copy(PrintWriter w);
 
     /**
+     * Generate code that compares this field's value in {@code this} vs {@code _other},
+     * writing {@code if (...) return false;} when they differ.
+     * Called only when both objects are known to have the field present.
+     */
+    abstract public void equalsCode(PrintWriter w);
+
+    /**
+     * Generate code that folds this field's value into the running hash variable {@code _h}.
+     * Called only when the field is known to be present.
+     */
+    abstract public void hashCodeCode(PrintWriter w);
+
+    /**
      * Generate code to eagerly resolve any lazily-deserialized data for this field,
      * so the object no longer depends on _parsedBuffer.
      * Default: no-op (already eagerly deserialized).

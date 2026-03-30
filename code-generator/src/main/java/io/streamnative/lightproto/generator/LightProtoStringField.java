@@ -143,6 +143,17 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (!java.util.Objects.equals(%s(), _other.%s())) return false;\n",
+                Util.camelCase("get", field.getName()), Util.camelCase("get", field.getName()));
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + java.util.Objects.hashCode(%s());\n", Util.camelCase("get", field.getName()));
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }

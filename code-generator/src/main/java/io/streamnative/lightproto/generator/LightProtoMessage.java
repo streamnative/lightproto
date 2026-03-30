@@ -85,6 +85,8 @@ public class LightProtoMessage {
 
         generateParseFromJson(w);
         generateMaterialize(w);
+        generateEquals(w);
+        generateHashCode(w);
 
         w.println("        /** Serialize this message to a new byte array. */");
         w.println("        public byte[] toByteArray() {");
@@ -417,6 +419,86 @@ public class LightProtoMessage {
         }
         w.println("            _parsedBuffer = null;");
         w.println("        }");
+    }
+
+    private void generateEquals(PrintWriter w) {
+        w.format("        @Override public boolean equals(Object _o) {\n");
+        w.format("            if (this == _o) return true;\n");
+        w.format("            if (!(_o instanceof %s)) return false;\n", message.getName());
+        w.format("            %s _other = (%s) _o;\n", message.getName(), message.getName());
+
+        // Fast-path: compare bitfields (explicit presence)
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            w.format("            if (_bitField%d != _other._bitField%d) return false;\n", i, i);
+        }
+
+        // Compare oneof cases
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            String ccOneofName = Util.camelCase(oneof.getName());
+            w.format("            if (_%sCase != _other._%sCase) return false;\n", ccOneofName, ccOneofName);
+        }
+
+        // Compare each field's value
+        for (LightProtoField f : fields) {
+            if (f.isRepeated()) {
+                // Repeated fields are always compared
+                f.equalsCode(w);
+            } else if (f.field.hasImplicitPresence()) {
+                // Proto3 implicit presence: always compare value
+                f.equalsCode(w);
+            } else if (f.isOneofMember()) {
+                // Oneof: compare only when this alternative is active
+                w.format("            if (_%sCase == %s) {\n",
+                        Util.camelCase(f.field.getOneofName()), f.fieldNumber());
+                f.equalsCode(w);
+                w.format("            }\n");
+            } else {
+                // Explicit presence: bitfields already compared, so only compare when set
+                w.format("            if (%s()) {\n", Util.camelCase("has", f.ccName));
+                f.equalsCode(w);
+                w.format("            }\n");
+            }
+        }
+
+        w.format("            return true;\n");
+        w.format("        }\n");
+    }
+
+    private void generateHashCode(PrintWriter w) {
+        w.format("        @Override public int hashCode() {\n");
+        w.format("            int _h = 0;\n");
+
+        // Include bitfields in hash
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            w.format("            _h = 31 * _h + _bitField%d;\n", i);
+        }
+
+        // Include oneof cases in hash
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            String ccOneofName = Util.camelCase(oneof.getName());
+            w.format("            _h = 31 * _h + _%sCase;\n", ccOneofName);
+        }
+
+        // Hash each field's value
+        for (LightProtoField f : fields) {
+            if (f.isRepeated()) {
+                f.hashCodeCode(w);
+            } else if (f.field.hasImplicitPresence()) {
+                f.hashCodeCode(w);
+            } else if (f.isOneofMember()) {
+                w.format("            if (_%sCase == %s) {\n",
+                        Util.camelCase(f.field.getOneofName()), f.fieldNumber());
+                f.hashCodeCode(w);
+                w.format("            }\n");
+            } else {
+                w.format("            if (%s()) {\n", Util.camelCase("has", f.ccName));
+                f.hashCodeCode(w);
+                w.format("            }\n");
+            }
+        }
+
+        w.format("            return _h;\n");
+        w.format("        }\n");
     }
 
     private void generateOneofFields(PrintWriter w) {

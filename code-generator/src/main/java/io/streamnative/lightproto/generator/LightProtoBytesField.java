@@ -160,6 +160,18 @@ public class LightProtoBytesField extends LightProtoField {
     }
 
     @Override
+    public void equalsCode(PrintWriter w) {
+        w.format("if (!io.netty.buffer.ByteBufUtil.equals(%s(), _other.%s())) return false;\n",
+                Util.camelCase("get", ccName, "slice"), Util.camelCase("get", ccName, "slice"));
+    }
+
+    @Override
+    public void hashCodeCode(PrintWriter w) {
+        w.format("_h = 31 * _h + io.netty.buffer.ByteBufUtil.hashCode(%s());\n",
+                Util.camelCase("get", ccName, "slice"));
+    }
+
+    @Override
     protected String typeTag() {
         return "LightProtoCodec.WIRETYPE_LENGTH_DELIMITED";
     }
