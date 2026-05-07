@@ -102,6 +102,23 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s {\\n\");\n", field.getName());
+        w.format("    %s[i].writeTextFormatTo(_sb, _indent + 1);\n", pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"}\\n\");\n");
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                if (_r.tryConsume(':')) {}\n");
+        w.format("                %s().parseFromTextFormat(_r.buf());\n", Util.camelCase("add", singularName));
+    }
+
+    @Override
     public void copy(PrintWriter w) {
         w.format("for (int i = 0; i < _other.%s(); i++) {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    %s().copyFrom(_other.%s(i));\n", Util.camelCase("add", singularName), Util.camelCase("get", singularName, "at"));

@@ -123,6 +123,33 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s: \");\n", field.getName());
+        w.format("    LightProtoCodec.writeTextFormatString(_sb, %s(i));\n",
+                Util.camelCase("get", singularName, "at"));
+        w.format("    _sb.append('\\n');\n");
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                if (_r.atArrayStart()) {\n");
+        w.format("                    _r.expect('[');\n");
+        w.format("                    if (!_r.tryConsume(']')) {\n");
+        w.format("                        do {\n");
+        w.format("                            %s(_r.readString());\n", Util.camelCase("add", singularName));
+        w.format("                        } while (_r.tryConsume(','));\n");
+        w.format("                        _r.expect(']');\n");
+        w.format("                    }\n");
+        w.format("                } else {\n");
+        w.format("                    %s(_r.readString());\n", Util.camelCase("add", singularName));
+        w.format("                }\n");
+    }
+
+    @Override
     public void copy(PrintWriter w) {
         w.format("for (int i = 0; i < _other.%s(); i++) {\n", Util.camelCase("get", pluralName, "count"));
         w.format("    %s(_other.%s(i));\n", Util.camelCase("add", singularName), Util.camelCase("get", singularName, "at"));

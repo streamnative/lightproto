@@ -39,6 +39,37 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
         w.format("}\n");
     }
 
+    @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s: \").append(%s[i].name()).append('\\n');\n",
+                field.getName(), pluralName);
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                if (_r.atArrayStart()) {\n");
+        w.format("                    _r.expect('[');\n");
+        w.format("                    if (!_r.tryConsume(']')) {\n");
+        w.format("                        do {\n");
+        w.format("                            { %s _v = %s.valueOf(_r.readIdentifier());\n",
+                field.getJavaType(), field.getJavaType());
+        w.format("                            if (_v != null) { %s(_v); } }\n",
+                Util.camelCase("add", singularName));
+        w.format("                        } while (_r.tryConsume(','));\n");
+        w.format("                        _r.expect(']');\n");
+        w.format("                    }\n");
+        w.format("                } else {\n");
+        w.format("                    { %s _v = %s.valueOf(_r.readIdentifier());\n",
+                field.getJavaType(), field.getJavaType());
+        w.format("                    if (_v != null) { %s(_v); } }\n",
+                Util.camelCase("add", singularName));
+        w.format("                }\n");
+    }
+
     public void parsePacked(PrintWriter w) {
         w.format("int _%s = LightProtoCodec.readVarInt(_buffer);\n", Util.camelCase(singularName, "size"));
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));

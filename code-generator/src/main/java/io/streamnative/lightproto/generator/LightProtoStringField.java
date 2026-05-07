@@ -128,6 +128,20 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"%s: \");\n", field.getName());
+        w.format("LightProtoCodec.writeTextFormatString(_sb, %s());\n", Util.camelCase("get", field.getName()));
+        w.format("_sb.append('\\n');\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                %s(_r.readString());\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     public void parse(PrintWriter w) {
         w.format("_%sBufferLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sBufferIdx = _buffer.readerIndex();\n", ccName);

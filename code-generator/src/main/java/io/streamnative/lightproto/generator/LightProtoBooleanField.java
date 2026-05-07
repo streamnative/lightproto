@@ -56,6 +56,19 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"%s: \").append(Boolean.toString(%s)).append('\\n');\n",
+                field.getName(), ccName);
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                %s(_r.readBool());\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     public void equalsCode(PrintWriter w) {
         w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
     }

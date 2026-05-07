@@ -164,6 +164,61 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        String type = field.getProtoType();
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s: \");\n", field.getName());
+        if (type.equals("bool")) {
+            w.format("    _sb.append(Boolean.toString(_item));\n");
+        } else if (type.equals("float")) {
+            w.format("    LightProtoCodec.writeTextFormatFloat(_sb, _item);\n");
+        } else if (type.equals("double")) {
+            w.format("    LightProtoCodec.writeTextFormatDouble(_sb, _item);\n");
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("    _sb.append(Long.toString(_item));\n");
+        } else {
+            w.format("    _sb.append(Integer.toString(_item));\n");
+        }
+        w.format("    _sb.append('\\n');\n");
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        String type = field.getProtoType();
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                if (_r.atArrayStart()) {\n");
+        w.format("                    _r.expect('[');\n");
+        w.format("                    if (!_r.tryConsume(']')) {\n");
+        w.format("                        do {\n");
+        emitParseTextFormatScalarAdd(w, type, "                            ");
+        w.format("                        } while (_r.tryConsume(','));\n");
+        w.format("                        _r.expect(']');\n");
+        w.format("                    }\n");
+        w.format("                } else {\n");
+        emitParseTextFormatScalarAdd(w, type, "                    ");
+        w.format("                }\n");
+    }
+
+    private void emitParseTextFormatScalarAdd(PrintWriter w, String type, String indent) {
+        if (type.equals("bool")) {
+            w.format("%s%s(_r.readBool());\n", indent, Util.camelCase("add", singularName));
+        } else if (type.equals("float")) {
+            w.format("%s%s(_r.readFloat());\n", indent, Util.camelCase("add", singularName));
+        } else if (type.equals("double")) {
+            w.format("%s%s(_r.readDouble());\n", indent, Util.camelCase("add", singularName));
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("%s%s(_r.readLong());\n", indent, Util.camelCase("add", singularName));
+        } else {
+            w.format("%s%s(_r.readInt());\n", indent, Util.camelCase("add", singularName));
+        }
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(%s %s) {\n", Util.camelCase("add", singularName), field.getJavaType(), singularName);

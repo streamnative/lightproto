@@ -99,6 +99,9 @@
                 <groupId>${project.groupId}</groupId>
                 <artifactId>lightproto-maven-plugin</artifactId>
                 <version>${project.version}</version>
+                <configuration>
+                    <generateTextFormat>true</generateTextFormat>
+                </configuration>
                 <executions>
                     <execution>
                         <goals>

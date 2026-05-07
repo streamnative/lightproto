@@ -142,6 +142,24 @@ public abstract class LightProtoField {
 
     abstract public void parseJson(PrintWriter w);
 
+    /**
+     * Emit code that writes the complete TextFormat representation of this field.
+     * Locals available: {@code _sb} (StringBuilder), {@code _indent} (int).
+     * The emitted code MUST write the indent, field name, value, and trailing newline(s).
+     */
+    public void serializeTextFormat(PrintWriter w) {
+        throw new UnsupportedOperationException("serializeTextFormat not implemented for " + getClass().getSimpleName());
+    }
+
+    /**
+     * Emit code that, given a {@code LightProtoCodec.TextFormatReader _r} positioned
+     * immediately after this field's name, consumes the separator, reads the value,
+     * and stores it on the message.
+     */
+    public void parseTextFormat(PrintWriter w) {
+        throw new UnsupportedOperationException("parseTextFormat not implemented for " + getClass().getSimpleName());
+    }
+
     abstract public void parse(PrintWriter w);
 
     abstract public void copy(PrintWriter w);

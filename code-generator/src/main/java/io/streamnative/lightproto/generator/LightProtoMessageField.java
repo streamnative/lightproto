@@ -87,6 +87,21 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"%s {\\n\");\n", field.getName());
+        w.format("%s.writeTextFormatTo(_sb, _indent + 1);\n", ccName);
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"}\\n\");\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                if (_r.tryConsume(':')) {}\n");
+        w.format("                %s().parseFromTextFormat(_r.buf());\n", Util.camelCase("set", ccName));
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getSerializedSize());\n", ccName);

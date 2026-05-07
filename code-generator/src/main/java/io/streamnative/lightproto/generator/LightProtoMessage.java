@@ -26,6 +26,7 @@ public class LightProtoMessage {
 
     private final ProtoMessageDescriptor message;
     private final boolean isNested;
+    private final boolean generateTextFormat;
     private final List<LightProtoEnum> enums;
     private final List<LightProtoField> fields;
     private final List<LightProtoMessage> nestedMessages;
@@ -33,10 +34,15 @@ public class LightProtoMessage {
     private final Map<Integer, List<LightProtoField>> oneofFields;
 
     public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested) {
+        this(message, isNested, false);
+    }
+
+    public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested, boolean generateTextFormat) {
         this.message = message;
         this.isNested = isNested;
+        this.generateTextFormat = generateTextFormat;
         this.enums = message.getNestedEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
-        this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true)).collect(Collectors.toList());
+        this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true, generateTextFormat)).collect(Collectors.toList());
         this.oneofs = message.getOneofs();
 
         this.fields = new ArrayList<>();
@@ -84,6 +90,10 @@ public class LightProtoMessage {
         generateCopyFrom(w);
 
         generateParseFromJson(w);
+        if (generateTextFormat) {
+            generateWriteTextFormatTo(w);
+            generateParseFromTextFormat(w);
+        }
         generateMaterialize(w);
         generateEquals(w);
         generateHashCode(w);
@@ -351,6 +361,95 @@ public class LightProtoMessage {
         w.format("                }\n");
         w.format("            } while (_r.tryConsume((byte) ','));\n");
         w.format("            _r.expect((byte) '}');\n");
+        w.format("        }\n");
+    }
+
+    private void generateWriteTextFormatTo(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * Serialize this message in protobuf canonical TextFormat (multi-line, indented),");
+        w.println("         * compatible with what {@code com.google.protobuf.TextFormat.printer()} produces.");
+        w.println("         */");
+        w.println("        public void writeTextFormatTo(StringBuilder _sb, int _indent) {");
+
+        for (LightProtoField f : fields) {
+            String condition = f.serializeCondition();
+            // Repeated/map fields handle their own iteration and write nothing when empty.
+            String guard = condition;
+            if (guard == null && f.isRepeated()) {
+                if (f instanceof LightProtoMapField) {
+                    guard = "_" + f.ccName + "Count > 0";
+                } else if (f instanceof LightProtoAbstractRepeated repeated) {
+                    guard = "_" + repeated.pluralName + "Count > 0";
+                }
+            }
+            if (guard != null) {
+                w.format("            if (%s) {\n", guard);
+            }
+            f.serializeTextFormat(w);
+            if (guard != null) {
+                w.format("            }\n");
+            }
+        }
+
+        w.println("        }");
+
+        w.println("        /** Serialize this message to a protobuf TextFormat string. */");
+        w.println("        public String toTextFormat() {");
+        w.println("            StringBuilder _sb = new StringBuilder();");
+        w.println("            writeTextFormatTo(_sb, 0);");
+        w.println("            return _sb.toString();");
+        w.println("        }");
+
+        w.println("        /** Serialize this message to the given StringBuilder in protobuf TextFormat. */");
+        w.println("        public void writeTextFormatTo(StringBuilder _sb) {");
+        w.println("            writeTextFormatTo(_sb, 0);");
+        w.println("        }");
+    }
+
+    private void generateParseFromTextFormat(PrintWriter w) {
+        w.println("        /** Parse this message from a protobuf TextFormat string. */");
+        w.println("        public void parseFromTextFormat(String _text) {");
+        w.println("            parseFromTextFormat(_text.getBytes(java.nio.charset.StandardCharsets.UTF_8));");
+        w.println("        }");
+
+        w.println("        /** Parse this message from a UTF-8 encoded protobuf TextFormat byte array. */");
+        w.println("        public void parseFromTextFormat(byte[] _bytes) {");
+        w.println("            parseFromTextFormat(io.netty.buffer.Unpooled.wrappedBuffer(_bytes));");
+        w.println("        }");
+
+        w.println("        /**");
+        w.println("         * Parse this message from a TextFormat-encoded {@link io.netty.buffer.ByteBuf}.");
+        w.println("         * Accepts both top-level (no enclosing braces) and sub-message (wrapped in {..} or <..>)");
+        w.println("         * encodings; this lets messages from different generated packages share the cursor.");
+        w.println("         */");
+        w.println("        public void parseFromTextFormat(io.netty.buffer.ByteBuf _b) {");
+        w.println("            clear();");
+        w.println("            LightProtoCodec.TextFormatReader _r = new LightProtoCodec.TextFormatReader(_b);");
+        w.println("            if (_r.atMessageStart()) {");
+        w.println("                char _close = _r.consumeMessageOpen();");
+        w.println("                _parseTextFormatMessage(_r);");
+        w.println("                _r.expect(_close);");
+        w.println("            } else {");
+        w.println("                _parseTextFormatMessage(_r);");
+        w.println("            }");
+        w.println("        }");
+
+        w.format("        void _parseTextFormatMessage(LightProtoCodec.TextFormatReader _r) {\n");
+        w.format("            while (!_r.atFieldsEnd()) {\n");
+        w.format("                String _fieldName = _r.readIdentifier();\n");
+        w.format("                switch (_fieldName) {\n");
+
+        for (LightProtoField f : fields) {
+            w.format("                case \"%s\":\n", f.field.getName());
+            f.parseTextFormat(w);
+            w.format("                    break;\n");
+        }
+
+        w.format("                default:\n");
+        w.format("                    _r.skipValue();\n");
+        w.format("                }\n");
+        w.format("                _r.skipOptionalSeparator();\n");
+        w.format("            }\n");
         w.format("        }\n");
     }
 
