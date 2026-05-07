@@ -25,7 +25,7 @@ Add the Maven plugin to your `pom.xml`:
 <plugin>
     <groupId>io.streamnative.lightproto</groupId>
     <artifactId>lightproto-maven-plugin</artifactId>
-    <version>0.6.5</version>
+    <version>0.7.0</version>
     <executions>
         <execution>
             <goals>
@@ -45,7 +45,7 @@ Add the plugin to your `build.gradle`:
 
 ```groovy
 plugins {
-    id 'io.streamnative.lightproto' version '0.6.5'
+    id 'io.streamnative.lightproto' version '0.7.0'
 }
 ```
 
@@ -57,7 +57,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.6.5'
+        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.7.0'
     }
 }
 
