@@ -419,8 +419,8 @@ public class LightProtoMessage {
 
         w.println("        /**");
         w.println("         * Parse this message from a TextFormat-encoded {@link io.netty.buffer.ByteBuf}.");
-        w.println("         * Accepts both top-level (no enclosing braces) and sub-message (wrapped in {..} or <..>)");
-        w.println("         * encodings; this lets messages from different generated packages share the cursor.");
+        w.println("         * Accepts both top-level (no enclosing braces) and sub-message encodings,");
+        w.println("         * so messages from different generated packages can share the cursor.");
         w.println("         */");
         w.println("        public void parseFromTextFormat(io.netty.buffer.ByteBuf _b) {");
         w.println("            clear();");
