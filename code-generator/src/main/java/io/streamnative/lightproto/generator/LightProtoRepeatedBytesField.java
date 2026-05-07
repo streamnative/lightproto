@@ -123,6 +123,37 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s: \");\n", field.getName());
+        w.format("    if (_bh.idx == -1) {\n");
+        w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _bh.b, 0, _bh.len);\n");
+        w.format("    } else {\n");
+        w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _bh.idx, _bh.len);\n");
+        w.format("    }\n");
+        w.format("    _sb.append('\\n');\n");
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                if (_r.atArrayStart()) {\n");
+        w.format("                    _r.expect('[');\n");
+        w.format("                    if (!_r.tryConsume(']')) {\n");
+        w.format("                        do {\n");
+        w.format("                            %s(_r.readBytes());\n", Util.camelCase("add", singularName));
+        w.format("                        } while (_r.tryConsume(','));\n");
+        w.format("                        _r.expect(']');\n");
+        w.format("                    }\n");
+        w.format("                } else {\n");
+        w.format("                    %s(_r.readBytes());\n", Util.camelCase("add", singularName));
+        w.format("                }\n");
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list from a byte array. */\n", field.getName());
         w.format("public void %s(byte[] %s) {\n", Util.camelCase("add", singularName), singularName);

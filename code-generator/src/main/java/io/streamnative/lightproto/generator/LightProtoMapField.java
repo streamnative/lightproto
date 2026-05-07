@@ -623,6 +623,174 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"%s {\\n\");\n", field.getName());
+
+        // Write key at indent + 1
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent + 1);\n");
+        w.format("    _sb.append(\"key: \");\n");
+        if (isStringKey()) {
+            w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[_i];\n", ccName);
+            w.format("    if (_ksh.s == null) {\n");
+            w.format("        _ksh.s = LightProtoCodec.readString(_parsedBuffer, _ksh.idx, _ksh.len);\n");
+            w.format("    }\n");
+            w.format("    LightProtoCodec.writeTextFormatString(_sb, _ksh.s);\n");
+        } else if (keyField.getJavaType().equals("boolean")) {
+            w.format("    _sb.append(Boolean.toString(_%sKeys[_i]));\n", ccName);
+        } else if (keyField.getJavaType().equals("long")) {
+            w.format("    _sb.append(Long.toString(_%sKeys[_i]));\n", ccName);
+        } else {
+            w.format("    _sb.append(Integer.toString(_%sKeys[_i]));\n", ccName);
+        }
+        w.format("    _sb.append('\\n');\n");
+
+        // Write value at indent + 1
+        if (isMessageValue()) {
+            w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent + 1);\n");
+            w.format("    _sb.append(\"value {\\n\");\n");
+            w.format("    _%sValues[_i].writeTextFormatTo(_sb, _indent + 2);\n", ccName);
+            w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent + 1);\n");
+            w.format("    _sb.append(\"}\\n\");\n");
+        } else {
+            w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent + 1);\n");
+            w.format("    _sb.append(\"value: \");\n");
+            if (isStringValue()) {
+                w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[_i];\n", ccName);
+                w.format("    if (_vsh.s == null) {\n");
+                w.format("        _vsh.s = LightProtoCodec.readString(_parsedBuffer, _vsh.idx, _vsh.len);\n");
+                w.format("    }\n");
+                w.format("    LightProtoCodec.writeTextFormatString(_sb, _vsh.s);\n");
+            } else if (isBytesValue()) {
+                w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
+                w.format("    if (_vbh.idx == -1) {\n");
+                w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _vbh.b, 0, _vbh.len);\n");
+                w.format("    } else {\n");
+                w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _vbh.idx, _vbh.len);\n");
+                w.format("    }\n");
+            } else if (isEnumValue()) {
+                w.format("    _sb.append(_%sValues[_i].name());\n", ccName);
+            } else if (valueField.getProtoType().equals("bool")) {
+                w.format("    _sb.append(Boolean.toString(_%sValues[_i]));\n", ccName);
+            } else if (valueField.getProtoType().equals("float")) {
+                w.format("    LightProtoCodec.writeTextFormatFloat(_sb, _%sValues[_i]);\n", ccName);
+            } else if (valueField.getProtoType().equals("double")) {
+                w.format("    LightProtoCodec.writeTextFormatDouble(_sb, _%sValues[_i]);\n", ccName);
+            } else if (valueField.getJavaType().equals("long")) {
+                w.format("    _sb.append(Long.toString(_%sValues[_i]));\n", ccName);
+            } else {
+                w.format("    _sb.append(Integer.toString(_%sValues[_i]));\n", ccName);
+            }
+            w.format("    _sb.append('\\n');\n");
+        }
+
+        w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("    _sb.append(\"}\\n\");\n");
+        w.format("}\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        // Each invocation reads ONE entry: '{ key: ... value: ... }'
+        w.format("                if (_r.tryConsume(':')) {}\n");
+        w.format("                { char _entryClose = _r.consumeMessageOpen();\n");
+
+        // Declare temp vars for key/value
+        if (isStringKey()) {
+            w.format("                  String _key = \"\";\n");
+        } else if (keyField.getJavaType().equals("boolean")) {
+            w.format("                  boolean _key = false;\n");
+        } else if (keyField.getJavaType().equals("long")) {
+            w.format("                  long _key = 0L;\n");
+        } else {
+            w.format("                  int _key = 0;\n");
+        }
+
+        if (!isMessageValue()) {
+            if (isStringValue()) {
+                w.format("                  String _val = \"\";\n");
+            } else if (isBytesValue()) {
+                w.format("                  byte[] _val = new byte[0];\n");
+            } else if (isEnumValue()) {
+                w.format("                  %s _val = null;\n", valueField.getJavaType());
+            } else if (valueField.getProtoType().equals("bool")) {
+                w.format("                  boolean _val = false;\n");
+            } else if (valueField.getProtoType().equals("float")) {
+                w.format("                  float _val = 0.0f;\n");
+            } else if (valueField.getProtoType().equals("double")) {
+                w.format("                  double _val = 0.0;\n");
+            } else if (valueField.getJavaType().equals("long")) {
+                w.format("                  long _val = 0L;\n");
+            } else {
+                w.format("                  int _val = 0;\n");
+            }
+        }
+
+        if (isMessageValue()) {
+            // For message values, we can't buffer the inner block — parse directly
+            // into a freshly-put entry. Maps allow `value` to come before `key`, but
+            // we resolve that by overwriting the key after.
+            w.format("                  %s _msg = null;\n", valueField.getJavaType());
+        }
+
+        w.format("                  while (!_r.atFieldsEnd()) {\n");
+        w.format("                    String _entryFieldName = _r.readIdentifier();\n");
+        w.format("                    if (_entryFieldName.equals(\"key\")) {\n");
+        w.format("                      _r.consumeFieldSeparator();\n");
+        if (isStringKey()) {
+            w.format("                      _key = _r.readString();\n");
+        } else if (keyField.getJavaType().equals("boolean")) {
+            w.format("                      _key = _r.readBool();\n");
+        } else if (keyField.getJavaType().equals("long")) {
+            w.format("                      _key = _r.readLong();\n");
+        } else {
+            w.format("                      _key = _r.readInt();\n");
+        }
+        w.format("                    } else if (_entryFieldName.equals(\"value\")) {\n");
+        if (isMessageValue()) {
+            w.format("                      if (_r.tryConsume(':')) {}\n");
+            w.format("                      _msg = new %s();\n", valueField.getJavaType());
+            w.format("                      _msg.parseFromTextFormat(_r.buf());\n");
+        } else {
+            w.format("                      _r.consumeFieldSeparator();\n");
+            if (isStringValue()) {
+                w.format("                      _val = _r.readString();\n");
+            } else if (isBytesValue()) {
+                w.format("                      _val = _r.readBytes();\n");
+            } else if (isEnumValue()) {
+                w.format("                      _val = %s.valueOf(_r.readIdentifier());\n", valueField.getJavaType());
+            } else if (valueField.getProtoType().equals("bool")) {
+                w.format("                      _val = _r.readBool();\n");
+            } else if (valueField.getProtoType().equals("float")) {
+                w.format("                      _val = _r.readFloat();\n");
+            } else if (valueField.getProtoType().equals("double")) {
+                w.format("                      _val = _r.readDouble();\n");
+            } else if (valueField.getJavaType().equals("long")) {
+                w.format("                      _val = _r.readLong();\n");
+            } else {
+                w.format("                      _val = _r.readInt();\n");
+            }
+        }
+        w.format("                    } else {\n");
+        w.format("                      _r.skipValue();\n");
+        w.format("                    }\n");
+        w.format("                    _r.skipOptionalSeparator();\n");
+        w.format("                  }\n");
+        w.format("                  _r.expect(_entryClose);\n");
+
+        if (isMessageValue()) {
+            w.format("                  if (_msg != null) { %s(_key).copyFrom(_msg); }\n",
+                    Util.camelCase("put", ccName));
+        } else if (isEnumValue()) {
+            w.format("                  if (_val != null) { %s(_key, _val); }\n", Util.camelCase("put", ccName));
+        } else {
+            w.format("                  %s(_key, _val);\n", Util.camelCase("put", ccName));
+        }
+        w.format("                }\n");
+    }
+
+    @Override
     public void serialize(PrintWriter w) {
         w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
 

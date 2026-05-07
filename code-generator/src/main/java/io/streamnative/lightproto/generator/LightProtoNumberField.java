@@ -225,6 +225,40 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"%s: \");\n", field.getName());
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("LightProtoCodec.writeTextFormatFloat(_sb, %s);\n", ccName);
+        } else if (type.equals("double")) {
+            w.format("LightProtoCodec.writeTextFormatDouble(_sb, %s);\n", ccName);
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("_sb.append(Long.toString(%s));\n", ccName);
+        } else {
+            w.format("_sb.append(Integer.toString(%s));\n", ccName);
+        }
+        w.format("_sb.append('\\n');\n");
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        String type = field.getProtoType();
+        if (type.equals("float")) {
+            w.format("                %s(_r.readFloat());\n", Util.camelCase("set", field.getName()));
+        } else if (type.equals("double")) {
+            w.format("                %s(_r.readDouble());\n", Util.camelCase("set", field.getName()));
+        } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
+                || type.equals("fixed64") || type.equals("sfixed64")) {
+            w.format("                %s(_r.readLong());\n", Util.camelCase("set", field.getName()));
+        } else {
+            w.format("                %s(_r.readInt());\n", Util.camelCase("set", field.getName()));
+        }
+    }
+
+    @Override
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Set the {@code %s} field. */\n", field.getName());
         w.format("public %s %s(%s %s) {\n", enclosingType, Util.camelCase("set", field.getName()), field.getJavaType(), camelCase(field.getName()));

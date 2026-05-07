@@ -11,6 +11,7 @@ High-performance Protocol Buffers code generator for Java, optimized for seriali
 - **Lazy string/bytes deserialization** — decoded only on access
 - **Optimized string handling** — single-copy ASCII fast path via `sun.misc.Unsafe`
 - **Protobuf-compatible JSON serialization and deserialization** — `toJson()` / `parseFromJson()` methods
+- **Protobuf TextFormat (de)serialization** — opt-in `toTextFormat()` / `parseFromTextFormat()` for compatibility with `com.google.protobuf.TextFormat`
 - **No runtime dependencies** — generated code is self-contained
 - **Maven and Gradle plugins** for seamless build integration
 
@@ -70,9 +71,23 @@ before compilation. Optional configuration:
 lightproto {
     classPrefix = ''           // prefix for generated class names
     singleOuterClass = false   // wrap all messages in a single outer class
+    generateTextFormat = false // also generate protobuf TextFormat (de)serialization methods
     protocVersion = '4.34.0'   // protoc compiler version
     // protocPath = '/usr/local/bin/protoc'  // use a local protoc binary
 }
+```
+
+For Maven, the same options are configured under `<configuration>` on the plugin:
+
+```xml
+<plugin>
+    <groupId>io.streamnative.lightproto</groupId>
+    <artifactId>lightproto-maven-plugin</artifactId>
+    <configuration>
+        <generateTextFormat>true</generateTextFormat>
+    </configuration>
+    <!-- ... -->
+</plugin>
 ```
 
 ### API Example
@@ -128,6 +143,39 @@ parsed.parseFromJson(jsonBytes);
 The JSON encoding follows protobuf conventions: lowerCamelCase field names, int64 values quoted
 as strings, enum values as names, and bytes fields as base64. Unknown fields are silently ignored
 during parsing, ensuring forward compatibility.
+
+### Protobuf TextFormat (opt-in)
+
+Set `generateTextFormat = true` (Gradle) or `<generateTextFormat>true</generateTextFormat>`
+(Maven) to also emit TextFormat (de)serialization on every message. The output is compatible
+with `com.google.protobuf.TextFormat.printer()` and `TextFormat.merge()` for backward
+compatibility with existing TextFormat data:
+
+```java
+// Serialize to a multi-line, indented TextFormat string
+String text = md.toTextFormat();
+// producer_name: "producer-1"
+// sequence_id: 12345
+// publish_time: 1711234567890
+// property {
+//   key: "key1"
+//   value: "value1"
+// }
+
+// Or write to a StringBuilder
+StringBuilder sb = new StringBuilder();
+md.writeTextFormatTo(sb);
+
+// Deserialize from a String, byte[], or ByteBuf
+MessageMetadata parsed = new MessageMetadata();
+parsed.parseFromTextFormat(text);
+```
+
+Differences from JSON: field names are the original proto snake_case, `int64` values are
+**not** quoted, enum values are emitted as bare identifiers, and bytes are written as
+quoted strings with C-style escapes. The parser tolerates `# … ` comments, single- or
+double-quoted strings, angle-bracket sub-messages (`field <…>`), `[v1, v2]` array syntax for
+repeated fields, and ignores unknown fields.
 
 ### gRPC Integration
 
@@ -213,6 +261,7 @@ client streaming, and bidirectional streaming.
 | Multiple `.proto` files / `import` | ✅ | ✅ |
 | `service` / RPC definitions (gRPC stubs) | ✅ | ✅ |
 | JSON serialization and deserialization | ✅ | ✅ |
+| TextFormat serialization and deserialization (opt-in) | ✅ | ✅ |
 | Extensions | ❌ | — |
 | `Any`, `Timestamp`, well-known types | ❌ | ❌ |
 | `group` (deprecated) | ❌ | — |

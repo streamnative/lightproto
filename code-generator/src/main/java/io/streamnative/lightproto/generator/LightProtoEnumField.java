@@ -77,6 +77,19 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
+    public void serializeTextFormat(PrintWriter w) {
+        w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
+        w.format("_sb.append(\"%s: \").append(%s.name()).append('\\n');\n", field.getName(), ccName);
+    }
+
+    @Override
+    public void parseTextFormat(PrintWriter w) {
+        w.format("                _r.consumeFieldSeparator();\n");
+        w.format("                { %s _v = %s.valueOf(_r.readIdentifier());\n", field.getJavaType(), field.getJavaType());
+        w.format("                if (_v != null) { %s(_v); } }\n", Util.camelCase("set", field.getName()));
+    }
+
+    @Override
     public void equalsCode(PrintWriter w) {
         w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
     }

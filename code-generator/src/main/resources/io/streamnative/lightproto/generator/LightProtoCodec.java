@@ -930,4 +930,557 @@ class LightProtoCodec {
             return readable() <= 0;
         }
     }
+
+    // ==================== TextFormat serialization helpers ====================
+
+    interface LightProtoTextFormatMessage {
+        void writeTextFormatTo(StringBuilder sb, int indent);
+    }
+
+    static void writeTextFormatIndent(StringBuilder sb, int indent) {
+        for (int i = 0; i < indent; i++) {
+            sb.append("  ");
+        }
+    }
+
+    static void writeTextFormatString(StringBuilder sb, String s) {
+        sb.append('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            appendTextFormatEscapedChar(sb, c);
+        }
+        sb.append('"');
+    }
+
+    static void writeTextFormatBytes(StringBuilder sb, ByteBuf data, int offset, int len) {
+        sb.append('"');
+        for (int i = 0; i < len; i++) {
+            int b = data.getByte(offset + i) & 0xFF;
+            appendTextFormatEscapedByte(sb, b);
+        }
+        sb.append('"');
+    }
+
+    private static void appendTextFormatEscapedChar(StringBuilder sb, char c) {
+        switch (c) {
+            case '\b': sb.append("\\b"); return;
+            case '\f': sb.append("\\f"); return;
+            case '\n': sb.append("\\n"); return;
+            case '\r': sb.append("\\r"); return;
+            case '\t': sb.append("\\t"); return;
+            case '\\': sb.append("\\\\"); return;
+            case '\'': sb.append("\\'"); return;
+            case '"':  sb.append("\\\""); return;
+            default:
+                if (c >= 0x20 && c < 0x7F) {
+                    sb.append(c);
+                } else {
+                    // Encode as UTF-8 escape sequences (\xNN per byte)
+                    byte[] enc = String.valueOf(c).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                    for (byte b : enc) {
+                        appendOctalEscape(sb, b & 0xFF);
+                    }
+                }
+        }
+    }
+
+    private static void appendTextFormatEscapedByte(StringBuilder sb, int b) {
+        switch (b) {
+            case '\b': sb.append("\\b"); return;
+            case '\f': sb.append("\\f"); return;
+            case '\n': sb.append("\\n"); return;
+            case '\r': sb.append("\\r"); return;
+            case '\t': sb.append("\\t"); return;
+            case '\\': sb.append("\\\\"); return;
+            case '\'': sb.append("\\'"); return;
+            case '"':  sb.append("\\\""); return;
+            default:
+                if (b >= 0x20 && b < 0x7F) {
+                    sb.append((char) b);
+                } else {
+                    appendOctalEscape(sb, b);
+                }
+        }
+    }
+
+    private static void appendOctalEscape(StringBuilder sb, int b) {
+        sb.append('\\');
+        sb.append((char) ('0' + ((b >> 6) & 0x3)));
+        sb.append((char) ('0' + ((b >> 3) & 0x7)));
+        sb.append((char) ('0' + (b & 0x7)));
+    }
+
+    static void writeTextFormatFloat(StringBuilder sb, float f) {
+        if (Float.isNaN(f)) {
+            sb.append("nan");
+        } else if (f == Float.POSITIVE_INFINITY) {
+            sb.append("inf");
+        } else if (f == Float.NEGATIVE_INFINITY) {
+            sb.append("-inf");
+        } else {
+            sb.append(Float.toString(f));
+        }
+    }
+
+    static void writeTextFormatDouble(StringBuilder sb, double d) {
+        if (Double.isNaN(d)) {
+            sb.append("nan");
+        } else if (d == Double.POSITIVE_INFINITY) {
+            sb.append("inf");
+        } else if (d == Double.NEGATIVE_INFINITY) {
+            sb.append("-inf");
+        } else {
+            sb.append(Double.toString(d));
+        }
+    }
+
+    // ==================== TextFormat parsing utilities ====================
+
+    /**
+     * Lightweight reader for protobuf canonical TextFormat, operating on a {@link ByteBuf} so
+     * that nested sub-messages from another generated package can advance the same cursor by
+     * sharing the underlying buffer (mirrors the {@link JsonReader} pattern).
+     *
+     * <p>Handles the syntax produced by protobuf-java's {@code TextFormat.printer()} plus a few
+     * common variants (angle-bracket sub-messages, single-quoted strings, '#' comments, optional
+     * commas/semicolons between fields, '[..]' array syntax for repeated values).
+     */
+    static final class TextFormatReader {
+        private final ByteBuf buf;
+
+        TextFormatReader(ByteBuf buf) {
+            this.buf = buf;
+        }
+
+        ByteBuf buf() { return buf; }
+
+        private int readable() { return buf.readableBytes(); }
+        private byte at(int offset) { return buf.getByte(buf.readerIndex() + offset); }
+
+        void skipWhitespaceAndComments() {
+            while (readable() > 0) {
+                byte b = at(0);
+                if (b == ' ' || b == '\t' || b == '\n' || b == '\r') {
+                    buf.skipBytes(1);
+                } else if (b == '#') {
+                    while (readable() > 0 && at(0) != '\n') {
+                        buf.skipBytes(1);
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        boolean isEof() {
+            skipWhitespaceAndComments();
+            return readable() <= 0;
+        }
+
+        /** True at EOF or when the next non-whitespace byte is '}' or '>'. */
+        boolean atFieldsEnd() {
+            skipWhitespaceAndComments();
+            if (readable() <= 0) return true;
+            byte b = at(0);
+            return b == '}' || b == '>';
+        }
+
+        /** True when the next non-whitespace byte is '{' or '<' (start of a sub-message body). */
+        boolean atMessageStart() {
+            skipWhitespaceAndComments();
+            if (readable() <= 0) return false;
+            byte b = at(0);
+            return b == '{' || b == '<';
+        }
+
+        boolean tryConsume(char c) {
+            skipWhitespaceAndComments();
+            if (readable() > 0 && at(0) == (byte) c) {
+                buf.skipBytes(1);
+                return true;
+            }
+            return false;
+        }
+
+        void expect(char c) {
+            skipWhitespaceAndComments();
+            if (readable() <= 0 || at(0) != (byte) c) {
+                throw new IllegalArgumentException("Expected '" + c + "' at position " + buf.readerIndex()
+                        + " but found " + (readable() > 0 ? "'" + (char) at(0) + "'" : "end of input"));
+            }
+            buf.skipBytes(1);
+        }
+
+        /** Read an identifier ([a-zA-Z_][a-zA-Z0-9_]*). Used for field names and enum values. */
+        String readIdentifier() {
+            skipWhitespaceAndComments();
+            int start = buf.readerIndex();
+            if (readable() > 0) {
+                byte b = at(0);
+                if (b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')) {
+                    buf.skipBytes(1);
+                    while (readable() > 0) {
+                        b = at(0);
+                        if (b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+                                || (b >= '0' && b <= '9')) {
+                            buf.skipBytes(1);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+            }
+            int end = buf.readerIndex();
+            if (end == start) {
+                throw new IllegalArgumentException("Expected identifier at position " + start);
+            }
+            byte[] tmp = new byte[end - start];
+            buf.getBytes(start, tmp);
+            return new String(tmp, java.nio.charset.StandardCharsets.US_ASCII);
+        }
+
+        /**
+         * Consume the separator after a field name. Either ':' (always valid) or, when the
+         * next significant character is '{' or '<' (sub-message), the colon may be omitted.
+         */
+        void consumeFieldSeparator() {
+            skipWhitespaceAndComments();
+            if (readable() > 0) {
+                byte b = at(0);
+                if (b == '{' || b == '<') {
+                    return; // colon optional before sub-message
+                }
+            }
+            expect(':');
+        }
+
+        /** Consume the message opener ('{' or '<') and return the matching closer character. */
+        char consumeMessageOpen() {
+            skipWhitespaceAndComments();
+            if (readable() > 0) {
+                byte b = at(0);
+                if (b == '{') { buf.skipBytes(1); return '}'; }
+                if (b == '<') { buf.skipBytes(1); return '>'; }
+            }
+            throw new IllegalArgumentException("Expected '{' or '<' at position " + buf.readerIndex());
+        }
+
+        /** Optional separator between fields/elements ('','' or '';''). */
+        void skipOptionalSeparator() {
+            skipWhitespaceAndComments();
+            if (readable() > 0) {
+                byte b = at(0);
+                if (b == ',' || b == ';') buf.skipBytes(1);
+            }
+        }
+
+        boolean atArrayStart() {
+            skipWhitespaceAndComments();
+            return readable() > 0 && at(0) == '[';
+        }
+
+        /** Read raw bytes of a quoted string (handles concatenation of adjacent strings). */
+        byte[] readBytes() {
+            skipWhitespaceAndComments();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            readQuotedBytesInto(out);
+            // Concatenated string literals: "abc" "def" → "abcdef"
+            while (true) {
+                int save = buf.readerIndex();
+                skipWhitespaceAndComments();
+                if (readable() > 0 && (at(0) == '"' || at(0) == '\'')) {
+                    readQuotedBytesInto(out);
+                } else {
+                    buf.readerIndex(save);
+                    break;
+                }
+            }
+            return out.toByteArray();
+        }
+
+        String readString() {
+            return new String(readBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+
+        private void readQuotedBytesInto(java.io.ByteArrayOutputStream out) {
+            if (readable() <= 0) {
+                throw new IllegalArgumentException("Expected string at position " + buf.readerIndex());
+            }
+            byte quote = at(0);
+            if (quote != '"' && quote != '\'') {
+                throw new IllegalArgumentException("Expected '\"' or '\\'' at position " + buf.readerIndex());
+            }
+            buf.skipBytes(1);
+            while (readable() > 0) {
+                byte b = buf.readByte();
+                if (b == quote) {
+                    return;
+                }
+                if (b == '\\') {
+                    if (readable() <= 0) {
+                        throw new IllegalArgumentException("Unterminated escape");
+                    }
+                    byte esc = buf.readByte();
+                    switch (esc) {
+                        case 'a': out.write(0x07); break;
+                        case 'b': out.write(0x08); break;
+                        case 'f': out.write(0x0C); break;
+                        case 'n': out.write(0x0A); break;
+                        case 'r': out.write(0x0D); break;
+                        case 't': out.write(0x09); break;
+                        case 'v': out.write(0x0B); break;
+                        case '\\': out.write('\\'); break;
+                        case '\'': out.write('\''); break;
+                        case '"': out.write('"'); break;
+                        case '?': out.write('?'); break;
+                        case 'x':
+                        case 'X': {
+                            int val = 0;
+                            int n = 0;
+                            while (readable() > 0 && n < 2 && isHexDigit(at(0))) {
+                                val = (val << 4) | hexDigitValue(at(0));
+                                buf.skipBytes(1);
+                                n++;
+                            }
+                            if (n == 0) {
+                                throw new IllegalArgumentException("Invalid \\x escape");
+                            }
+                            out.write(val);
+                            break;
+                        }
+                        case 'u': {
+                            int val = readFixedHex(4);
+                            byte[] enc = new String(Character.toChars(val))
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            out.write(enc, 0, enc.length);
+                            break;
+                        }
+                        case 'U': {
+                            int val = readFixedHex(8);
+                            byte[] enc = new String(Character.toChars(val))
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            out.write(enc, 0, enc.length);
+                            break;
+                        }
+                        default:
+                            if (esc >= '0' && esc <= '7') {
+                                int val = esc - '0';
+                                int n = 1;
+                                while (readable() > 0 && n < 3 && at(0) >= '0' && at(0) <= '7') {
+                                    val = (val << 3) | (at(0) - '0');
+                                    buf.skipBytes(1);
+                                    n++;
+                                }
+                                out.write(val);
+                            } else {
+                                throw new IllegalArgumentException("Invalid escape '\\" + (char) esc + "'");
+                            }
+                    }
+                } else {
+                    out.write(b & 0xFF);
+                }
+            }
+            throw new IllegalArgumentException("Unterminated string literal");
+        }
+
+        private int readFixedHex(int n) {
+            int val = 0;
+            for (int i = 0; i < n; i++) {
+                if (readable() <= 0 || !isHexDigit(at(0))) {
+                    throw new IllegalArgumentException("Expected " + n + " hex digits");
+                }
+                val = (val << 4) | hexDigitValue(at(0));
+                buf.skipBytes(1);
+            }
+            return val;
+        }
+
+        private static boolean isHexDigit(byte b) {
+            return (b >= '0' && b <= '9') || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F');
+        }
+
+        private static int hexDigitValue(byte b) {
+            if (b >= '0' && b <= '9') return b - '0';
+            if (b >= 'a' && b <= 'f') return b - 'a' + 10;
+            return b - 'A' + 10;
+        }
+
+        /** Read a raw numeric token (sign, digits, optional 0x prefix, decimal, exponent, suffix). */
+        String readNumberToken() {
+            skipWhitespaceAndComments();
+            int start = buf.readerIndex();
+            if (readable() > 0 && (at(0) == '-' || at(0) == '+')) {
+                buf.skipBytes(1);
+            }
+            while (readable() > 0) {
+                byte b = at(0);
+                if ((b >= '0' && b <= '9') || b == '.' || b == 'e' || b == 'E'
+                        || b == 'x' || b == 'X' || b == '-' || b == '+'
+                        || (b >= 'a' && b <= 'f') || (b >= 'A' && b <= 'F')) {
+                    buf.skipBytes(1);
+                } else {
+                    break;
+                }
+            }
+            // Optional integer suffix (u, l, U, L)
+            while (readable() > 0) {
+                byte b = at(0);
+                if (b == 'u' || b == 'U' || b == 'l' || b == 'L') {
+                    buf.skipBytes(1);
+                } else {
+                    break;
+                }
+            }
+            int end = buf.readerIndex();
+            if (end == start) {
+                throw new IllegalArgumentException("Expected number at position " + start);
+            }
+            byte[] tmp = new byte[end - start];
+            buf.getBytes(start, tmp);
+            return new String(tmp, java.nio.charset.StandardCharsets.US_ASCII);
+        }
+
+        int readInt() {
+            return (int) parseLongToken(readNumberToken());
+        }
+
+        long readLong() {
+            return parseLongToken(readNumberToken());
+        }
+
+        private static long parseLongToken(String tok) {
+            int end = tok.length();
+            while (end > 0) {
+                char c = tok.charAt(end - 1);
+                if (c == 'u' || c == 'U' || c == 'l' || c == 'L') end--; else break;
+            }
+            tok = tok.substring(0, end);
+            boolean negative = false;
+            int start = 0;
+            if (tok.startsWith("-")) { negative = true; start = 1; }
+            else if (tok.startsWith("+")) { start = 1; }
+            String body = tok.substring(start);
+            long val;
+            if (body.startsWith("0x") || body.startsWith("0X")) {
+                val = Long.parseUnsignedLong(body.substring(2), 16);
+            } else if (body.length() > 1 && body.startsWith("0") && allOctalDigits(body)) {
+                val = Long.parseUnsignedLong(body, 8);
+            } else {
+                val = Long.parseUnsignedLong(body, 10);
+            }
+            return negative ? -val : val;
+        }
+
+        private static boolean allOctalDigits(String s) {
+            for (int i = 0; i < s.length(); i++) {
+                char c = s.charAt(i);
+                if (c < '0' || c > '7') return false;
+            }
+            return true;
+        }
+
+        float readFloat() {
+            return (float) readDouble();
+        }
+
+        double readDouble() {
+            skipWhitespaceAndComments();
+            int save = buf.readerIndex();
+            boolean negative = false;
+            if (readable() > 0 && (at(0) == '-' || at(0) == '+')) {
+                negative = at(0) == '-';
+                buf.skipBytes(1);
+            }
+            if (readable() > 0) {
+                byte b = at(0);
+                if (b == 'n' || b == 'N') {
+                    if (matchKeyword("nan")) return Double.NaN;
+                }
+                if (b == 'i' || b == 'I') {
+                    if (matchKeyword("infinity") || matchKeyword("inf")) {
+                        return negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+                    }
+                }
+            }
+            buf.readerIndex(save);
+            String tok = readNumberToken();
+            if (tok.endsWith("f") || tok.endsWith("F")) {
+                tok = tok.substring(0, tok.length() - 1);
+            }
+            return Double.parseDouble(tok);
+        }
+
+        private boolean matchKeyword(String keyword) {
+            if (readable() < keyword.length()) return false;
+            for (int i = 0; i < keyword.length(); i++) {
+                byte a = at(i);
+                char b = keyword.charAt(i);
+                if (Character.toLowerCase((char) a) != b) return false;
+            }
+            // Must not be followed by an identifier char
+            if (readable() > keyword.length()) {
+                byte c = at(keyword.length());
+                if (c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
+                        || (c >= '0' && c <= '9')) {
+                    return false;
+                }
+            }
+            buf.skipBytes(keyword.length());
+            return true;
+        }
+
+        boolean readBool() {
+            skipWhitespaceAndComments();
+            if (matchKeyword("true") || matchKeyword("t")) return true;
+            if (matchKeyword("false") || matchKeyword("f")) return false;
+            String tok = readNumberToken();
+            if (tok.equals("1")) return true;
+            if (tok.equals("0")) return false;
+            throw new IllegalArgumentException("Expected boolean but found '" + tok + "'");
+        }
+
+        /** Skip a single value (scalar, sub-message, or array). Used for unknown fields. */
+        void skipValue() {
+            skipWhitespaceAndComments();
+            if (readable() <= 0) return;
+            byte b = at(0);
+            if (b == ':') {
+                buf.skipBytes(1);
+                skipWhitespaceAndComments();
+                if (readable() <= 0) return;
+                b = at(0);
+            }
+            if (b == '{' || b == '<') {
+                char close = consumeMessageOpen();
+                while (!atFieldsEnd()) {
+                    readIdentifier();
+                    skipWhitespaceAndComments();
+                    if (readable() > 0 && (at(0) == '{' || at(0) == '<')) {
+                        skipValue();
+                    } else {
+                        if (readable() > 0 && at(0) == ':') buf.skipBytes(1);
+                        skipValue();
+                    }
+                    skipOptionalSeparator();
+                }
+                expect(close);
+            } else if (b == '[') {
+                buf.skipBytes(1);
+                if (!tryConsume(']')) {
+                    do {
+                        skipValue();
+                    } while (tryConsume(','));
+                    expect(']');
+                }
+            } else if (b == '"' || b == '\'') {
+                readBytes();
+            } else if (b == '-' || b == '+' || (b >= '0' && b <= '9')) {
+                readNumberToken();
+            } else if (b == '_' || (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')) {
+                readIdentifier();
+            } else {
+                throw new IllegalArgumentException("Unexpected character '" + (char) b + "' at position " + buf.readerIndex());
+            }
+        }
+    }
 }

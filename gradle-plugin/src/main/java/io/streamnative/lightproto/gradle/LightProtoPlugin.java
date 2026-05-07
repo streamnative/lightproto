@@ -34,6 +34,7 @@ public class LightProtoPlugin implements Plugin<Project> {
 
         extension.getClassPrefix().convention("");
         extension.getSingleOuterClass().convention(false);
+        extension.getGenerateTextFormat().convention(false);
         extension.getProtocVersion().convention("4.34.0");
 
         registerTaskForSourceSet(project, extension, "main");
@@ -51,6 +52,7 @@ public class LightProtoPlugin implements Plugin<Project> {
                 project.getTasks().register(taskName, GenerateLightProtoTask.class, task -> {
                     task.getClassPrefix().set(extension.getClassPrefix());
                     task.getSingleOuterClass().set(extension.getSingleOuterClass());
+                    task.getGenerateTextFormat().set(extension.getGenerateTextFormat());
                     task.getProtocVersion().set(extension.getProtocVersion());
                     task.getProtocPath().set(extension.getProtocPath());
                     task.getExtraProtoPaths().from(extension.getExtraProtoPaths());
