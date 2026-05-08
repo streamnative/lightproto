@@ -171,7 +171,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    LightProtoCodec.BytesHolder _bh = _%sValues[%s];\n", ccName, idxVar);
             w.format("    if (_bh.idx == -1) {\n");
             w.format("        byte[] _res = new byte[_bh.len];\n");
-            w.format("        _bh.b.getBytes(0, _res);\n");
+            w.format("        _bh.b.getBytes(_bh.b.readerIndex(), _res);\n");
             w.format("        return _res;\n");
             w.format("    } else {\n");
             w.format("        byte[] _res = new byte[_bh.len];\n");
@@ -207,7 +207,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("        byte[] %s;\n", varName);
             w.format("        if (_vbh.idx == -1) {\n");
             w.format("            %s = new byte[_vbh.len];\n", varName);
-            w.format("            _vbh.b.getBytes(0, %s);\n", varName);
+            w.format("            _vbh.b.getBytes(_vbh.b.readerIndex(), %s);\n", varName);
             w.format("        } else {\n");
             w.format("            %s = new byte[_vbh.len];\n", varName);
             w.format("            _parsedBuffer.getBytes(_vbh.idx, %s);\n", varName);
@@ -892,7 +892,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _vbh.len);\n");
             w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
             w.format("    if (_vbh.idx == -1) {\n");
-            w.format("        _vbh.b.getBytes(0, _b, _vbh.len);\n");
+            w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _b, _vbh.len);\n");
             w.format("    } else {\n");
             w.format("        _parsedBuffer.getBytes(_vbh.idx, _b, _vbh.len);\n");
             w.format("    }\n");
@@ -955,7 +955,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    byte[] _val;\n");
             w.format("    if (_vbh.idx == -1) {\n");
             w.format("        _val = new byte[_vbh.len];\n");
-            w.format("        _vbh.b.getBytes(0, _val);\n");
+            w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _val);\n");
             w.format("    } else {\n");
             w.format("        _val = new byte[_vbh.len];\n");
             w.format("        _other._parsedBuffer.getBytes(_vbh.idx, _val);\n");
@@ -1063,9 +1063,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    if (!java.util.Objects.equals(_vsh1.s, _vsh2.s)) return false;\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh1 = _%sValues[_i];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs1 = _vbh1.b != null ? _vbh1.b.slice(0, _vbh1.len) : _parsedBuffer.slice(_vbh1.idx, _vbh1.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs1 = _vbh1.b != null ? _vbh1.b.slice(_vbh1.b.readerIndex(), _vbh1.len) : _parsedBuffer.slice(_vbh1.idx, _vbh1.len);\n");
             w.format("    LightProtoCodec.BytesHolder _vbh2 = _other._%sValues[_oIdx];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs2 = _vbh2.b != null ? _vbh2.b.slice(0, _vbh2.len) : _other._parsedBuffer.slice(_vbh2.idx, _vbh2.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs2 = _vbh2.b != null ? _vbh2.b.slice(_vbh2.b.readerIndex(), _vbh2.len) : _other._parsedBuffer.slice(_vbh2.idx, _vbh2.len);\n");
             w.format("    if (!io.netty.buffer.ByteBufUtil.equals(_bs1, _bs2)) return false;\n");
         } else if (isMessageValue()) {
             w.format("    if (!_%sValues[_i].equals(_other._%sValues[_oIdx])) return false;\n", ccName, ccName);
@@ -1117,7 +1117,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _eH = 31 * _eH + _vsh.s.hashCode();\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs = _vbh.b != null ? _vbh.b.slice(0, _vbh.len) : _parsedBuffer.slice(_vbh.idx, _vbh.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs = _vbh.b != null ? _vbh.b.slice(_vbh.b.readerIndex(), _vbh.len) : _parsedBuffer.slice(_vbh.idx, _vbh.len);\n");
             w.format("    _eH = 31 * _eH + io.netty.buffer.ByteBufUtil.hashCode(_bs);\n");
         } else if (isMessageValue()) {
             w.format("    _eH = 31 * _eH + _%sValues[_i].hashCode();\n", ccName);

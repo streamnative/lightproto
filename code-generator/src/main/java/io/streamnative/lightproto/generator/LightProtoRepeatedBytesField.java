@@ -75,7 +75,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    if (_bh.b == null) {\n");
         w.format("        return _parsedBuffer.slice(_bh.idx, _bh.len);\n");
         w.format("    } else {\n");
-        w.format("        return _bh.b.slice(0, _bh.len);\n");
+        w.format("        return _bh.b.slice(_bh.b.readerIndex(), _bh.len);\n");
         w.format("    }\n");
         w.format("}\n");
     }
@@ -88,7 +88,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _bh.len);\n");
         w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
         w.format("    if (_bh.idx == -1) {\n");
-        w.format("        _bh.b.getBytes(0, _b, _bh.len);\n");
+        w.format("        _bh.b.getBytes(_bh.b.readerIndex(), _b, _bh.len);\n");
         w.format("    } else {\n");
         w.format("        _parsedBuffer.getBytes(_bh.idx, _b, _bh.len);\n");
         w.format("    }\n");
@@ -103,7 +103,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    if (i > 0) { _b.writeByte(','); }\n");
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    if (_bh.idx == -1) {\n");
-        w.format("        LightProtoCodec.writeJsonBase64(_b, _bh.b, 0, _bh.len);\n");
+        w.format("        LightProtoCodec.writeJsonBase64(_b, _bh.b, _bh.b.readerIndex(), _bh.len);\n");
         w.format("    } else {\n");
         w.format("        LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _bh.idx, _bh.len);\n");
         w.format("    }\n");
@@ -129,7 +129,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
         w.format("    _sb.append(\"%s: \");\n", field.getName());
         w.format("    if (_bh.idx == -1) {\n");
-        w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _bh.b, 0, _bh.len);\n");
+        w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _bh.b, _bh.b.readerIndex(), _bh.len);\n");
         w.format("    } else {\n");
         w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _bh.idx, _bh.len);\n");
         w.format("    }\n");
