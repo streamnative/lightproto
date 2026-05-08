@@ -69,6 +69,33 @@ public class RequiredTest {
     }
 
     @Test
+    public void testUnsetRequiredReturnsDefault() {
+        R lpr = new R();
+        Required.R.Builder pbr = Required.R.newBuilder();
+
+        // Getter on unset required field returns default value (matches protobuf-java).
+        assertFalse(lpr.hasA());
+        assertFalse(pbr.hasA());
+        assertEquals(pbr.getA(), lpr.getA());
+        assertEquals(0, lpr.getA());
+
+        // Serialization fails for both when a required field is missing.
+        assertThrows(IllegalStateException.class, () -> lpr.writeTo(bb1));
+        assertThrows(com.google.protobuf.UninitializedMessageException.class, pbr::build);
+
+        // Deserialization fails for both when payload is missing a required field.
+        NR lpnr = new NR().setB(3);
+        bb1.clear();
+        lpnr.writeTo(bb1);
+        byte[] payload = new byte[bb1.readableBytes()];
+        bb1.getBytes(bb1.readerIndex(), payload);
+
+        assertThrows(IllegalStateException.class, () -> new R().parseFrom(bb1, bb1.readableBytes()));
+        assertThrows(com.google.protobuf.InvalidProtocolBufferException.class,
+                () -> Required.R.parseFrom(payload));
+    }
+
+    @Test
     public void testDeserializeWithMissingFields() throws Exception {
         NR lpnr = new NR()
                 .setB(3);
