@@ -98,7 +98,7 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("    if (%s == null) {\n", ccName);
         w.format("        return _parsedBuffer.slice(_%sIdx, _%sLen);\n", ccName, ccName);
         w.format("    } else {\n");
-        w.format("        return %s.slice(0, _%sLen);\n", ccName, ccName);
+        w.format("        return %s.slice(%s.readerIndex(), _%sLen);\n", ccName, ccName, ccName);
         w.format("    }\n");
         w.format("}\n");
     }
@@ -124,7 +124,7 @@ public class LightProtoBytesField extends LightProtoField {
     @Override
     public void serializeJson(PrintWriter w) {
         w.format("if (_%sIdx == -1) {\n", ccName);
-        w.format("    LightProtoCodec.writeJsonBase64(_b, %s, 0, _%sLen);\n", ccName, ccName);
+        w.format("    LightProtoCodec.writeJsonBase64(_b, %s, %s.readerIndex(), _%sLen);\n", ccName, ccName, ccName);
         w.format("} else {\n");
         w.format("    LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _%sIdx, _%sLen);\n", ccName, ccName);
         w.format("}\n");
@@ -140,7 +140,8 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
         w.format("_sb.append(\"%s: \");\n", field.getName());
         w.format("if (_%sIdx == -1) {\n", ccName);
-        w.format("    LightProtoCodec.writeTextFormatBytes(_sb, %s, 0, _%sLen);\n", ccName, ccName);
+        w.format("    LightProtoCodec.writeTextFormatBytes(_sb, %s, %s.readerIndex(), _%sLen);\n",
+                ccName, ccName, ccName);
         w.format("} else {\n");
         w.format("    LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _%sIdx, _%sLen);\n", ccName, ccName);
         w.format("}\n");
@@ -159,7 +160,10 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sLen);\n", ccName);
         w.format("_b.writerIndex((int)(_addr - _baseOffset));\n");
         w.format("if (_%sIdx == -1) {\n", ccName);
-        w.format("    _b.writeBytes(%s);\n", ccName);
+        // Use the absolute-indexed copy so we don't mutate the source buffer's
+        // readerIndex; that allows the message to be re-serialized (e.g. on
+        // gRPC retry) and lets two fields safely alias the same backing buffer.
+        w.format("    %s.getBytes(%s.readerIndex(), _b, _%sLen);\n", ccName, ccName, ccName);
         w.format("} else {\n");
         w.format("    _parsedBuffer.getBytes(_%sIdx, _b, _%sLen);\n", ccName, ccName);
         w.format("}\n");

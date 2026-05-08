@@ -137,6 +137,76 @@ public class BytesTest {
     }
 
     @Test
+    public void testByteBufNotConsumedBySerialization() throws Exception {
+        // Setting a ByteBuf-typed bytes field must not advance the source
+        // buffer's readerIndex during serialization, otherwise:
+        //   1. the same message can't be serialized more than once (e.g.
+        //      across gRPC retries), and
+        //   2. two fields backed by the same ByteBuf would clobber each other
+        //      because the second field would read 0 bytes.
+        ByteBuf payload = Unpooled.wrappedBuffer(new byte[]{10, 20, 30, 40});
+        int readerIdxBefore = payload.readerIndex();
+        int readableBytesBefore = payload.readableBytes();
+
+        B lpb = new B().setPayload(payload);
+
+        bb1.clear();
+        lpb.writeTo(bb1);
+
+        assertEquals(readerIdxBefore, payload.readerIndex(),
+                "setX(ByteBuf) + writeTo must not consume the source buffer's readerIndex");
+        assertEquals(readableBytesBefore, payload.readableBytes());
+
+        // Serialize a second time — must produce the same wire bytes.
+        ByteBuf bb2nd = Unpooled.buffer(4096);
+        lpb.writeTo(bb2nd);
+        assertEquals(bb1.readableBytes(), bb2nd.readableBytes());
+        assertEquals(bb1, bb2nd);
+    }
+
+    @Test
+    public void testByteBufWithNonZeroReaderIndex() throws Exception {
+        // Setting a ByteBuf whose readerIndex > 0 should still serialize
+        // the readable region correctly.
+        ByteBuf raw = Unpooled.wrappedBuffer(new byte[]{99, 99, 99, 1, 2, 3});
+        raw.readerIndex(3); // skip three padding bytes
+        assertEquals(3, raw.readableBytes());
+
+        B lpb = new B().setPayload(raw);
+        assertArrayEquals(new byte[]{1, 2, 3}, lpb.getPayload());
+
+        bb1.clear();
+        lpb.writeTo(bb1);
+
+        B parsed = new B();
+        parsed.parseFrom(bb1, bb1.readableBytes());
+        assertArrayEquals(new byte[]{1, 2, 3}, parsed.getPayload());
+    }
+
+    @Test
+    public void testTwoByteBufFieldsCanShareUnderlyingBuffer() throws Exception {
+        // Two bytes fields in the same message both backed by the same
+        // ByteBuf reference must each serialize the full content. This
+        // mirrors the bookkeeper stream-storage routing-header pattern
+        // where the same key is stored as both the request key and the
+        // routing header rKey.
+        ByteBuf shared = Unpooled.wrappedBuffer(new byte[]{1, 2, 3, 4, 5});
+
+        B lpb = new B().setPayload(shared);
+        lpb.addExtraItem(shared);
+
+        bb1.clear();
+        lpb.writeTo(bb1);
+
+        B parsed = new B();
+        parsed.parseFrom(bb1, bb1.readableBytes());
+
+        assertArrayEquals(new byte[]{1, 2, 3, 4, 5}, parsed.getPayload());
+        assertEquals(1, parsed.getExtraItemsCount());
+        assertArrayEquals(new byte[]{1, 2, 3, 4, 5}, parsed.getExtraItemAt(0));
+    }
+
+    @Test
     public void testRepeatedBytes() throws Exception {
         B lpb = new B();
         lpb.addExtraItem(new byte[]{1, 2, 3});
