@@ -22,7 +22,7 @@
     <parent>
         <groupId>io.streamnative.lightproto</groupId>
         <artifactId>lightproto</artifactId>
-        <version>0.7.1</version>
+        <version>0.7.2</version>
         <relativePath>..</relativePath>
     </parent>
 
