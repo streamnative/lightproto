@@ -51,13 +51,21 @@ public class LightProtoGenerator {
     public static List<File> generate(List<ProtoFileDescriptor> descriptors, File outputDirectory,
                                       String classPrefix, boolean useOuterClass,
                                       List<String> fileNames) throws Exception {
-        return generate(descriptors, outputDirectory, classPrefix, useOuterClass, fileNames, false);
+        return generate(descriptors, outputDirectory, classPrefix, useOuterClass, fileNames, false, false);
     }
 
     public static List<File> generate(List<ProtoFileDescriptor> descriptors, File outputDirectory,
                                       String classPrefix, boolean useOuterClass,
                                       List<String> fileNames,
                                       boolean generateTextFormat) throws Exception {
+        return generate(descriptors, outputDirectory, classPrefix, useOuterClass, fileNames, generateTextFormat, false);
+    }
+
+    public static List<File> generate(List<ProtoFileDescriptor> descriptors, File outputDirectory,
+                                      String classPrefix, boolean useOuterClass,
+                                      List<String> fileNames,
+                                      boolean generateTextFormat,
+                                      boolean generateJson) throws Exception {
         List<File> generatedFiles = new ArrayList<>();
         Set<String> javaPackages = new HashSet<>();
 
@@ -74,7 +82,7 @@ public class LightProtoGenerator {
             String javaDir = Joiner.on('/').join(javaPackageName.split("\\."));
             Path targetDir = Paths.get(String.format("%s/%s", outputDirectory, javaDir));
 
-            LightProto lightProto = new LightProto(proto, fileName, outerClassName, useOuterClass, generateTextFormat);
+            LightProto lightProto = new LightProto(proto, fileName, outerClassName, useOuterClass, generateTextFormat, generateJson);
             generatedFiles.addAll(lightProto.generate(targetDir.toFile()));
 
             javaPackages.add(javaPackageName);

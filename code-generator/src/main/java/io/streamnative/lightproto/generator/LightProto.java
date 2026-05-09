@@ -40,12 +40,19 @@ public class LightProto {
 
     public LightProto(ProtoFileDescriptor proto, String protoFileName,
                       String outerClassName, boolean useOuterClass) {
-        this(proto, protoFileName, outerClassName, useOuterClass, false);
+        this(proto, protoFileName, outerClassName, useOuterClass, false, false);
     }
 
     public LightProto(ProtoFileDescriptor proto, String protoFileName,
                       String outerClassName, boolean useOuterClass,
                       boolean generateTextFormat) {
+        this(proto, protoFileName, outerClassName, useOuterClass, generateTextFormat, false);
+    }
+
+    public LightProto(ProtoFileDescriptor proto, String protoFileName,
+                      String outerClassName, boolean useOuterClass,
+                      boolean generateTextFormat,
+                      boolean generateJson) {
         this.proto = proto;
         this.protoFileName = protoFileName;
         this.outerClassName = outerClassName;
@@ -59,7 +66,7 @@ public class LightProto {
                 " */%n",
                 LightProtoGenerator.getVersion(), protoFileName);
         this.enums = proto.getEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
-        this.messages = proto.getMessages().stream().map(m -> new LightProtoMessage(m, useOuterClass, generateTextFormat)).collect(Collectors.toList());
+        this.messages = proto.getMessages().stream().map(m -> new LightProtoMessage(m, useOuterClass, generateTextFormat, generateJson)).collect(Collectors.toList());
         this.services = proto.getServices().stream().map(LightProtoService::new).collect(Collectors.toList());
     }
 

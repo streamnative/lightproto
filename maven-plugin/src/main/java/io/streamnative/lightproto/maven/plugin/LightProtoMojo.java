@@ -58,6 +58,9 @@ public class LightProtoMojo extends AbstractMojo {
     @Parameter(property = "generateTextFormat", defaultValue = "false", required = false)
     private boolean generateTextFormat;
 
+    @Parameter(property = "generateJson", defaultValue = "false", required = false)
+    private boolean generateJson;
+
     @Parameter(property = "sources", required = false)
     private List<File> sources;
 
@@ -162,7 +165,7 @@ public class LightProtoMojo extends AbstractMojo {
                 }
             }
 
-            LightProtoGenerator.generate(descriptors, outputDirectory, classPrefix, singleOuterClass, fileNames, generateTextFormat);
+            LightProtoGenerator.generate(descriptors, outputDirectory, classPrefix, singleOuterClass, fileNames, generateTextFormat, generateJson);
         } catch (MojoExecutionException e) {
             throw e;
         } catch (Exception e) {

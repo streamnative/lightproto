@@ -27,6 +27,7 @@ public class LightProtoMessage {
     private final ProtoMessageDescriptor message;
     private final boolean isNested;
     private final boolean generateTextFormat;
+    private final boolean generateJson;
     private final List<LightProtoEnum> enums;
     private final List<LightProtoField> fields;
     private final List<LightProtoMessage> nestedMessages;
@@ -34,15 +35,21 @@ public class LightProtoMessage {
     private final Map<Integer, List<LightProtoField>> oneofFields;
 
     public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested) {
-        this(message, isNested, false);
+        this(message, isNested, false, false);
     }
 
     public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested, boolean generateTextFormat) {
+        this(message, isNested, generateTextFormat, false);
+    }
+
+    public LightProtoMessage(ProtoMessageDescriptor message, boolean isNested,
+                             boolean generateTextFormat, boolean generateJson) {
         this.message = message;
         this.isNested = isNested;
         this.generateTextFormat = generateTextFormat;
+        this.generateJson = generateJson;
         this.enums = message.getNestedEnumGroups().stream().map(LightProtoEnum::new).collect(Collectors.toList());
-        this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true, generateTextFormat)).collect(Collectors.toList());
+        this.nestedMessages = message.getNestedMessages().stream().map(m -> new LightProtoMessage(m, true, generateTextFormat, generateJson)).collect(Collectors.toList());
         this.oneofs = message.getOneofs();
 
         this.fields = new ArrayList<>();
@@ -83,13 +90,17 @@ public class LightProtoMessage {
         generateOneofFields(w);
         generateSerialize(w);
         generateGetSerializedSize(w);
-        generateWriteJsonTo(w);
+        if (generateJson) {
+            generateWriteJsonTo(w);
+        }
         generateParseFrom(w);
         generateCheckRequiredFields(w);
         generateClear(w);
         generateCopyFrom(w);
 
-        generateParseFromJson(w);
+        if (generateJson) {
+            generateParseFromJson(w);
+        }
         if (generateTextFormat) {
             generateWriteTextFormatTo(w);
             generateParseFromTextFormat(w);
@@ -281,7 +292,7 @@ public class LightProtoMessage {
         w.println("         * the protobuf JSON encoding (lowerCamelCase field names).");
         w.println("         * @return the number of bytes written");
         w.println("         */");
-        w.format("        @Override public int writeJsonTo(io.netty.buffer.ByteBuf _b) {\n");
+        w.format("        public int writeJsonTo(io.netty.buffer.ByteBuf _b) {\n");
         w.format("            int _wIdx = _b.writerIndex();\n");
         w.format("            _b.writeByte('{');\n");
         w.format("            boolean _first = true;\n");
@@ -317,20 +328,26 @@ public class LightProtoMessage {
         // Convenience method: toJson()
         w.println("        /** Serialize this message to a JSON string. */");
         w.println("        public String toJson() {");
-        w.println("            return LightProtoCodec.toJson(this);");
+        w.println("            io.netty.buffer.ByteBuf _b = io.netty.buffer.Unpooled.buffer(256);");
+        w.println("            try {");
+        w.println("                writeJsonTo(_b);");
+        w.println("                return _b.toString(java.nio.charset.StandardCharsets.UTF_8);");
+        w.println("            } finally {");
+        w.println("                _b.release();");
+        w.println("            }");
         w.println("        }");
     }
 
     private void generateParseFromJson(PrintWriter w) {
         // Public API: parseFromJson(byte[])
         w.println("        /** Deserialize this message from a JSON byte array. */");
-        w.println("        @Override public void parseFromJson(byte[] _a) {");
+        w.println("        public void parseFromJson(byte[] _a) {");
         w.println("            parseFromJson(io.netty.buffer.Unpooled.wrappedBuffer(_a));");
         w.println("        }");
 
         // Public API: parseFromJson(ByteBuf)
         w.println("        /** Deserialize this message from a JSON-encoded ByteBuf. */");
-        w.println("        @Override public void parseFromJson(io.netty.buffer.ByteBuf _b) {");
+        w.println("        public void parseFromJson(io.netty.buffer.ByteBuf _b) {");
         w.println("            clear();");
         w.println("            _parseJsonObject(new LightProtoCodec.JsonReader(_b));");
         w.println("        }");

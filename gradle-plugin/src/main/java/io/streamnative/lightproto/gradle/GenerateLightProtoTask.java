@@ -50,6 +50,9 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
     public abstract Property<Boolean> getGenerateTextFormat();
 
     @Input
+    public abstract Property<Boolean> getGenerateJson();
+
+    @Input
     public abstract Property<String> getProtocVersion();
 
     @Internal
@@ -147,7 +150,8 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
             }
 
             LightProtoGenerator.generate(descriptors, outputDir, getClassPrefix().get(),
-                    getSingleOuterClass().get(), fileNames, getGenerateTextFormat().get());
+                    getSingleOuterClass().get(), fileNames, getGenerateTextFormat().get(),
+                    getGenerateJson().get());
         } catch (GradleException e) {
             throw e;
         } catch (Exception e) {
