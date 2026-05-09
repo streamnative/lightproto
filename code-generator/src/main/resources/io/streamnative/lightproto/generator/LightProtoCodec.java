@@ -576,26 +576,9 @@ class LightProtoCodec {
     interface LightProtoMessage {
         int getSerializedSize();
         int writeTo(ByteBuf b);
-        int writeJsonTo(ByteBuf b);
         void parseFrom(ByteBuf buffer, int size);
         void parseFrom(byte[] a);
-        void parseFromJson(byte[] a);
-        void parseFromJson(ByteBuf b);
         void materialize();
-    }
-
-    static void parseFromJson(LightProtoMessage msg, String json) {
-        msg.parseFromJson(json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-    }
-
-    static String toJson(LightProtoMessage msg) {
-        ByteBuf buf = io.netty.buffer.Unpooled.buffer(256);
-        try {
-            msg.writeJsonTo(buf);
-            return buf.toString(java.nio.charset.StandardCharsets.UTF_8);
-        } finally {
-            buf.release();
-        }
     }
 
     static final class StringHolder {

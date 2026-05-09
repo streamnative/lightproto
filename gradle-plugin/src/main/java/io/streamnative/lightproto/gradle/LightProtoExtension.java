@@ -27,6 +27,8 @@ public abstract class LightProtoExtension {
 
     public abstract Property<Boolean> getGenerateTextFormat();
 
+    public abstract Property<Boolean> getGenerateJson();
+
     public abstract Property<String> getProtocVersion();
 
     public abstract Property<String> getProtocPath();
