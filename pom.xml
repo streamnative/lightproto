@@ -68,7 +68,6 @@
         <junit.version>5.7.0</junit.version>
         <guava.version>32.0.0-jre</guava.version>
         <netty.version>4.1.131.Final</netty.version>
-        <jibx.version>1.3.3</jibx.version>
         <roaster.version>2.22.2.Final</roaster.version>
         <grpc.version>1.68.0</grpc.version>
 
@@ -175,12 +174,6 @@
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.jibx</groupId>
-                <artifactId>jibx-tools</artifactId>
-                <version>${jibx.version}</version>
             </dependency>
 
             <dependency>
