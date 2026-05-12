@@ -15,9 +15,8 @@
  */
 package io.streamnative.lightproto.generator;
 
-import com.google.common.collect.Maps;
-
 import java.io.PrintWriter;
+import java.util.HashMap;
 import java.util.Map;
 
 import static io.streamnative.lightproto.generator.Util.camelCase;
@@ -25,7 +24,7 @@ import static io.streamnative.lightproto.generator.Util.camelCase;
 public class LightProtoNumberField extends LightProtoField {
 
 
-    private static final Map<String, String> typeToTag = Maps.newHashMap();
+    private static final Map<String, String> typeToTag = new HashMap<>();
 
     static {
         typeToTag.put("double", "LightProtoCodec.WIRETYPE_FIXED64");

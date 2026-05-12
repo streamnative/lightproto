@@ -65,6 +65,55 @@ class UtilTest {
 
     @ParameterizedTest
     @CsvSource({
+            // typical snake_case
+            "first_name, firstName",
+            "user_id, userId",
+            "foo_bar_baz, fooBarBaz",
+            "snake_case_name, snakeCaseName",
+            // no underscore: returned as-is (does NOT lowercase)
+            "foo, foo",
+            "MyService, MyService",
+            // numerics
+            "abc_123, abc123",
+            // double underscore
+            "foo__bar, fooBar",
+            // leading underscore capitalizes the next char
+            "_leading, Leading",
+            "_msgSize, Msgsize",
+            // trailing underscore is dropped
+            "trailing_, trailing",
+            // embedded uppercase is normalized to lowercase (matches Guava)
+            "ALL_CAPS, allCaps",
+            "Foo_Bar, fooBar",
+            "FOO_BAR_BAZ, fooBarBaz",
+    })
+    void snakeToCamel(String input, String expected) {
+        assertEquals(expected, Util.lowerUnderscoreToLowerCamel(input));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            // typical camelCase
+            "fooBar, foo_bar",
+            "fooBarBaz, foo_bar_baz",
+            "myService, my_service",
+            // leading uppercase: lowercased without leading underscore
+            "MyService, my_service",
+            "X, x",
+            // no uppercase: unchanged
+            "foo, foo",
+            "first_name, first_name",
+            // numerics
+            "abc123, abc123",
+            // already snake-ish stays put
+            "foo_bar_baz, foo_bar_baz",
+    })
+    void camelToSnake(String input, String expected) {
+        assertEquals(expected, Util.lowerCamelToLowerUnderscore(input));
+    }
+
+    @ParameterizedTest
+    @CsvSource({
             // ends with 'ies': replace with 'y'
             "cities, city",
             "categories, category",
