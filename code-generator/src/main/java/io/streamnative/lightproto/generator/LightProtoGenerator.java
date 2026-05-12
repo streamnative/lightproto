@@ -15,7 +15,6 @@
  */
 package io.streamnative.lightproto.generator;
 
-import com.google.common.base.Joiner;
 import org.jboss.forge.roaster.Roaster;
 import org.jboss.forge.roaster.model.source.JavaClassSource;
 import org.slf4j.Logger;
@@ -79,7 +78,7 @@ public class LightProtoGenerator {
             String outerClassName = Util.camelCaseFirstUpper(classPrefix, fileWithoutExtension);
 
             String javaPackageName = proto.getJavaPackageName();
-            String javaDir = Joiner.on('/').join(javaPackageName.split("\\."));
+            String javaDir = String.join("/", javaPackageName.split("\\."));
             Path targetDir = Paths.get(String.format("%s/%s", outputDirectory, javaDir));
 
             LightProto lightProto = new LightProto(proto, fileName, outerClassName, useOuterClass, generateTextFormat, generateJson);
@@ -94,7 +93,7 @@ public class LightProtoGenerator {
                 JavaClassSource codecClass = (JavaClassSource) Roaster.parse(is);
                 codecClass.setPackage(javaPackage);
 
-                String javaDir = Joiner.on('/').join(javaPackage.split("\\."));
+                String javaDir = String.join("/", javaPackage.split("\\."));
                 Path codecFile = Paths.get(String.format("%s/%s/LightProtoCodec.java", outputDirectory, javaDir));
                 try (Writer w = Files.newBufferedWriter(codecFile)) {
                     w.write(String.format(

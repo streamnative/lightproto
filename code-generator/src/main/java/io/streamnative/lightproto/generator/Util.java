@@ -17,9 +17,6 @@ package io.streamnative.lightproto.generator;
 
 import java.io.PrintWriter;
 
-import static com.google.common.base.CaseFormat.LOWER_CAMEL;
-import static com.google.common.base.CaseFormat.LOWER_UNDERSCORE;
-
 public class Util {
 
     public static String camelCase(String... parts) {
@@ -30,7 +27,7 @@ public class Util {
                 continue;
             }
             if (s.contains("_")) {
-                s = LOWER_UNDERSCORE.to(LOWER_CAMEL, s);
+                s = lowerUnderscoreToLowerCamel(s);
             }
 
             if (i != 0) {
@@ -52,7 +49,7 @@ public class Util {
     public static String upperCase(String... parts) {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
-            String s = LOWER_CAMEL.to(LOWER_UNDERSCORE, parts[i]);
+            String s = lowerCamelToLowerUnderscore(parts[i]);
             if (i != 0) {
                 sb.append('_');
             }
@@ -61,6 +58,48 @@ public class Util {
         }
 
         return sb.toString().toUpperCase();
+    }
+
+    // Mirrors Guava's CaseFormat.LOWER_UNDERSCORE.to(LOWER_CAMEL, s):
+    // splits on '_', lowercases everything, capitalizes the first char of
+    // each non-leading segment.
+    static String lowerUnderscoreToLowerCamel(String s) {
+        if (s.indexOf('_') < 0) {
+            return s;
+        }
+        StringBuilder sb = new StringBuilder(s.length());
+        boolean upperNext = false;
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (c == '_') {
+                upperNext = true;
+            } else if (upperNext) {
+                sb.append(Character.toUpperCase(c));
+                upperNext = false;
+            } else {
+                sb.append(Character.toLowerCase(c));
+            }
+        }
+        return sb.toString();
+    }
+
+    // Mirrors Guava's CaseFormat.LOWER_CAMEL.to(LOWER_UNDERSCORE, s):
+    // inserts '_' before every uppercase letter (except a leading one) and
+    // lowercases all letters.
+    static String lowerCamelToLowerUnderscore(String s) {
+        StringBuilder sb = new StringBuilder(s.length() + 4);
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isUpperCase(c)) {
+                if (i > 0) {
+                    sb.append('_');
+                }
+                sb.append(Character.toLowerCase(c));
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
     }
 
     // pluralize/singular rules vendored from JiBX NameUtilities

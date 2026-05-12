@@ -66,7 +66,6 @@
 
         <slf4j.version>1.7.25</slf4j.version>
         <junit.version>5.7.0</junit.version>
-        <guava.version>32.0.0-jre</guava.version>
         <netty.version>4.1.131.Final</netty.version>
         <roaster.version>2.22.2.Final</roaster.version>
         <grpc.version>1.68.0</grpc.version>
@@ -157,11 +156,6 @@
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.guava</groupId>
-                <artifactId>guava</artifactId>
-                <version>${guava.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.netty</groupId>
