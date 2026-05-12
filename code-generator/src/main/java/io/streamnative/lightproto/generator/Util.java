@@ -17,9 +17,6 @@ package io.streamnative.lightproto.generator;
 
 import java.io.PrintWriter;
 
-import org.jibx.schema.codegen.extend.DefaultNameConverter;
-import org.jibx.schema.codegen.extend.NameConverter;
-
 import static com.google.common.base.CaseFormat.LOWER_CAMEL;
 import static com.google.common.base.CaseFormat.LOWER_UNDERSCORE;
 
@@ -66,14 +63,37 @@ public class Util {
         return sb.toString().toUpperCase();
     }
 
-    private static final NameConverter nameTools = new DefaultNameConverter();
-
-    public static String plural(String s) {
-        return nameTools.pluralize(s);
+    // pluralize/singular rules vendored from JiBX NameUtilities
+    // (Copyright (c) 2008-2010, Dennis M. Sosnoski, BSD 3-clause license).
+    public static String plural(String name) {
+        if (name.endsWith("List") || (name.endsWith("s") && !name.endsWith("ss"))) {
+            return name;
+        }
+        if (name.endsWith("y") && !name.endsWith("ay") && !name.endsWith("ey") && !name.endsWith("iy")
+                && !name.endsWith("oy") && !name.endsWith("uy")) {
+            if (name.equalsIgnoreCase("any")) {
+                return name;
+            }
+            return name.substring(0, name.length() - 1) + "ies";
+        } else if (name.endsWith("ss")) {
+            return name + "es";
+        } else {
+            return name + 's';
+        }
     }
 
-    public static String singular(String s) {
-        return nameTools.depluralize(s);
+    public static String singular(String name) {
+        if (name.endsWith("ies")) {
+            return name.substring(0, name.length() - 3) + 'y';
+        } else if (name.endsWith("sses")) {
+            return name.substring(0, name.length() - 2);
+        } else if (name.endsWith("s") && !name.endsWith("ss")) {
+            return name.substring(0, name.length() - 1);
+        } else if (name.endsWith("List")) {
+            return name.substring(0, name.length() - 4);
+        } else {
+            return name;
+        }
     }
 
     public static void writeJavadoc(PrintWriter w, String doc, String indent) {
