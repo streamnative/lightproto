@@ -397,7 +397,16 @@ class LightProtoCodec {
         if (current != null && current.length >= size) {
             return current;
         }
-        return new byte[Math.max(size, current == null ? 64 : current.length * 2)];
+        if (size > SCRATCH_RETAIN_MAX) {
+            // The result won't be retained, so growth amortization is pointless:
+            // allocate exactly what this outlier message needs.
+            return new byte[size];
+        }
+        // Double to amortize growth, but never past the retain cap: otherwise
+        // messages just under the cap would re-allocate an unretainable array
+        // on every write instead of settling on a reusable retained one.
+        int cap = Math.max(size, current == null ? 64 : current.length * 2);
+        return new byte[Math.min(cap, SCRATCH_RETAIN_MAX)];
     }
 
     static int writeRawByte(byte[] a, int i, int value) {

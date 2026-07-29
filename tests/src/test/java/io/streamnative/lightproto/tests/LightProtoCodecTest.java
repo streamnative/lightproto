@@ -20,6 +20,7 @@ import com.google.protobuf.CodedOutputStream;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 public class LightProtoCodecTest {
 
@@ -168,5 +170,27 @@ public class LightProtoCodecTest {
         assertEquals(s, LightProtoCodec.readString(bb, idx, sb.length));
 
         assertEquals(CodedOutputStream.computeStringSizeNoTag(s), LightProtoCodec.computeVarIntSize(sb.length) + LightProtoCodec.computeStringUTF8Size(s));
+    }
+
+    @Test
+    public void testScratchFor() {
+        // A fitting array is returned as-is
+        byte[] a = new byte[100];
+        assertSame(a, LightProtoCodec.scratchFor(a, 100));
+        assertSame(a, LightProtoCodec.scratchFor(a, 10));
+
+        // Growth doubles to amortize repeated small increases
+        byte[] grown = LightProtoCodec.scratchFor(a, 101);
+        assertEquals(200, grown.length);
+
+        // Doubling never pushes a retainable size past the retain cap: a message
+        // just under the cap must settle on a retained-size array, not
+        // re-allocate an oversized one on every write
+        byte[] nearCap = LightProtoCodec.scratchFor(new byte[600 * 1024], 700 * 1024);
+        assertEquals(LightProtoCodec.SCRATCH_RETAIN_MAX, nearCap.length);
+
+        // Beyond the cap: exact-size one-off allocation
+        int huge = LightProtoCodec.SCRATCH_RETAIN_MAX + 1;
+        assertEquals(huge, LightProtoCodec.scratchFor(nearCap, huge).length);
     }
 }
