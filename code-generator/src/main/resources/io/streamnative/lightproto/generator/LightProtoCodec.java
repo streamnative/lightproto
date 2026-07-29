@@ -38,9 +38,6 @@ class LightProtoCodec {
     // MethodHandles for Unsafe operations, resolved via reflection to avoid
     // referencing sun.misc.Unsafe as a type (which triggers javac warnings).
     // HotSpot inlines invokeExact on static final MethodHandles.
-    private static final MethodHandle MH_PUT_BYTE;
-    private static final MethodHandle MH_PUT_INT;
-    private static final MethodHandle MH_PUT_LONG;
     private static final MethodHandle MH_GET_OBJECT;
     private static final MethodHandle MH_PUT_OBJECT;
     private static final MethodHandle MH_COPY_MEMORY;
@@ -52,9 +49,6 @@ class LightProtoCodec {
         long offset = -1;
         long arrayBase = -1;
         boolean compactStrings = false;
-        MethodHandle mhPutByte = null;
-        MethodHandle mhPutInt = null;
-        MethodHandle mhPutLong = null;
         MethodHandle mhGetObject = null;
         MethodHandle mhPutObject = null;
         MethodHandle mhCopyMemory = null;
@@ -81,12 +75,6 @@ class LightProtoCodec {
 
             // Create MethodHandles for hot-path operations, bound to the Unsafe instance
             MethodHandles.Lookup lookup = MethodHandles.lookup();
-            mhPutByte = lookup.unreflect(
-                    unsafeClass.getMethod("putByte", Object.class, long.class, byte.class)).bindTo(unsafe);
-            mhPutInt = lookup.unreflect(
-                    unsafeClass.getMethod("putInt", Object.class, long.class, int.class)).bindTo(unsafe);
-            mhPutLong = lookup.unreflect(
-                    unsafeClass.getMethod("putLong", Object.class, long.class, long.class)).bindTo(unsafe);
             mhGetObject = lookup.unreflect(getObjectMethod).bindTo(unsafe);
             mhPutObject = lookup.unreflect(
                     unsafeClass.getMethod("putObject", Object.class, long.class, Object.class)).bindTo(unsafe);
@@ -105,9 +93,6 @@ class LightProtoCodec {
         STRING_VALUE_OFFSET = offset;
         BYTE_ARRAY_BASE_OFFSET = arrayBase;
         COMPACT_STRINGS = compactStrings;
-        MH_PUT_BYTE = mhPutByte;
-        MH_PUT_INT = mhPutInt;
-        MH_PUT_LONG = mhPutLong;
         MH_GET_OBJECT = mhGetObject;
         MH_PUT_OBJECT = mhPutObject;
         MH_COPY_MEMORY = mhCopyMemory;
@@ -395,102 +380,118 @@ class LightProtoCodec {
         }
     }
 
-    // --- Unsafe raw write methods for zero-overhead serialization ---
-    // These bypass all Netty ByteBuf boundary checks by writing directly to memory.
-    // Used by generated writeTo() methods after a single ensureWritable() call.
+    // --- Array-based raw write methods for zero-overhead serialization ---
+    // Serialization composes into a plain byte[] with an int cursor: heap buffers
+    // are written in place through their backing array, other buffer types are
+    // composed in a reusable scratch array and transferred with a single bulk
+    // writeBytes(). Plain array stores compile to raw memory accesses on every JDK
+    // (no sun.misc.Unsafe in the hot loop — its memory-access methods carry a
+    // per-call deprecation check since JDK 24).
 
-    static long writeRawByte(Object base, long addr, int value) {
-        try {
-            MH_PUT_BYTE.invokeExact(base, addr, (byte) value);
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
+    // Scratch arrays larger than this are not retained on the message instance,
+    // so outlier messages don't pin large allocations.
+    static final int SCRATCH_RETAIN_MAX = 1024 * 1024;
+
+    /** Returns current if it can hold size bytes, otherwise a larger replacement. */
+    static byte[] scratchFor(byte[] current, int size) {
+        if (current != null && current.length >= size) {
+            return current;
         }
-        return addr + 1;
+        if (size > SCRATCH_RETAIN_MAX) {
+            // The result won't be retained, so growth amortization is pointless:
+            // allocate exactly what this outlier message needs.
+            return new byte[size];
+        }
+        // Double to amortize growth, but never past the retain cap: otherwise
+        // messages just under the cap would re-allocate an unretainable array
+        // on every write instead of settling on a reusable retained one.
+        int cap = Math.max(size, current == null ? 64 : current.length * 2);
+        return new byte[Math.min(cap, SCRATCH_RETAIN_MAX)];
     }
 
-    static long writeRawVarInt(Object base, long addr, int n) {
-        try {
-            if (n >= 0) {
-                while (true) {
-                    if ((n & ~0x7F) == 0) {
-                        MH_PUT_BYTE.invokeExact(base, addr++, (byte) n);
-                        return addr;
-                    }
-                    MH_PUT_BYTE.invokeExact(base, addr++, (byte) ((n & 0x7F) | 0x80));
-                    n >>>= 7;
-                }
-            } else {
-                return writeRawVarInt64(base, addr, n);
-            }
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
+    static int writeRawByte(byte[] a, int i, int value) {
+        a[i] = (byte) value;
+        return i + 1;
     }
 
-    static long writeRawVarInt64(Object base, long addr, long value) {
-        try {
+    static int writeRawVarInt(byte[] a, int i, int n) {
+        if (n >= 0) {
             while (true) {
-                if ((value & ~0x7FL) == 0) {
-                    MH_PUT_BYTE.invokeExact(base, addr++, (byte) value);
-                    return addr;
+                if ((n & ~0x7F) == 0) {
+                    a[i++] = (byte) n;
+                    return i;
                 }
-                MH_PUT_BYTE.invokeExact(base, addr++, (byte) (((int) value & 0x7F) | 0x80));
-                value >>>= 7;
+                a[i++] = (byte) ((n & 0x7F) | 0x80);
+                n >>>= 7;
             }
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
+        } else {
+            return writeRawVarInt64(a, i, n);
         }
     }
 
-    static long writeRawSignedVarInt(Object base, long addr, int n) {
-        return writeRawVarInt(base, addr, encodeZigZag32(n));
-    }
-
-    static long writeRawSignedVarInt64(Object base, long addr, long n) {
-        return writeRawVarInt64(base, addr, encodeZigZag64(n));
-    }
-
-    static long writeRawLittleEndian32(Object base, long addr, int value) {
-        try {
-            MH_PUT_INT.invokeExact(base, addr, LITTLE_ENDIAN ? value : Integer.reverseBytes(value));
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
+    static int writeRawVarInt64(byte[] a, int i, long value) {
+        while (true) {
+            if ((value & ~0x7FL) == 0) {
+                a[i++] = (byte) value;
+                return i;
+            }
+            a[i++] = (byte) (((int) value & 0x7F) | 0x80);
+            value >>>= 7;
         }
-        return addr + 4;
     }
 
-    static long writeRawLittleEndian64(Object base, long addr, long value) {
-        try {
-            MH_PUT_LONG.invokeExact(base, addr, LITTLE_ENDIAN ? value : Long.reverseBytes(value));
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
-        }
-        return addr + 8;
+    static int writeRawSignedVarInt(byte[] a, int i, int n) {
+        return writeRawVarInt(a, i, encodeZigZag32(n));
     }
 
-    static long writeRawFloat(Object base, long addr, float n) {
-        return writeRawLittleEndian32(base, addr, Float.floatToRawIntBits(n));
+    static int writeRawSignedVarInt64(byte[] a, int i, long n) {
+        return writeRawVarInt64(a, i, encodeZigZag64(n));
     }
 
-    static long writeRawDouble(Object base, long addr, double n) {
-        return writeRawLittleEndian64(base, addr, Double.doubleToRawLongBits(n));
+    static int writeRawLittleEndian32(byte[] a, int i, int value) {
+        a[i] = (byte) value;
+        a[i + 1] = (byte) (value >>> 8);
+        a[i + 2] = (byte) (value >>> 16);
+        a[i + 3] = (byte) (value >>> 24);
+        return i + 4;
+    }
+
+    static int writeRawLittleEndian64(byte[] a, int i, long value) {
+        writeRawLittleEndian32(a, i, (int) value);
+        writeRawLittleEndian32(a, i + 4, (int) (value >>> 32));
+        return i + 8;
+    }
+
+    static int writeRawFloat(byte[] a, int i, float n) {
+        return writeRawLittleEndian32(a, i, Float.floatToRawIntBits(n));
+    }
+
+    static int writeRawDouble(byte[] a, int i, double n) {
+        return writeRawLittleEndian64(a, i, Double.doubleToRawLongBits(n));
     }
 
     /**
-     * Write an ASCII string directly via Unsafe. Returns new addr on success,
-     * or -1 if the string is non-ASCII and needs UTF-8 encoding via ByteBuf.
+     * Write a string's UTF-8 encoding (bytesCount bytes, as precomputed at set time)
+     * at index i. ASCII strings are copied straight from the String's internal
+     * byte[]; other strings go through the JDK encoder. Returns the index after.
      */
-    static long writeRawString(Object base, long addr, String s, int bytesCount) {
-        if (COMPACT_STRINGS && s.length() == bytesCount) {
-            try {
-                Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
-                MH_COPY_MEMORY.invokeExact((Object) _v, BYTE_ARRAY_BASE_OFFSET, base, addr, (long) bytesCount);
-            } catch (Throwable t) {
-                throw new RuntimeException(t);
+    static int writeRawString(byte[] a, int i, String s, int bytesCount) {
+        if (s.length() == bytesCount) {
+            // ASCII fast path: copy the String's internal LATIN1 byte[] directly
+            if (HAS_UNSAFE && COMPACT_STRINGS) {
+                try {
+                    Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
+                    System.arraycopy((byte[]) _v, 0, a, i, bytesCount);
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
+            } else {
+                System.arraycopy(s.getBytes(StandardCharsets.ISO_8859_1), 0, a, i, bytesCount);
             }
-            return addr + bytesCount;
+        } else {
+            System.arraycopy(s.getBytes(StandardCharsets.UTF_8), 0, a, i, bytesCount);
         }
-        return -1;
+        return i + bytesCount;
     }
 
     static String readString(ByteBuf b, int index, int len) {

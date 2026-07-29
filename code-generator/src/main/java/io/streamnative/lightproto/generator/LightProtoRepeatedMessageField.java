@@ -77,10 +77,8 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
         w.format("    %s;\n", writeTagExpr(tagName()));
-        w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _item.getSerializedSize());\n");
-        w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
-        w.format("    _item.writeTo(_b);\n");
-        w.format("    _addr = _baseOffset + _b.writerIndex();\n");
+        w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _item.getSerializedSize());\n");
+        w.format("    _i = _item._writeTo(_a, _i);\n");
         w.format("}\n");
     }
 

@@ -112,8 +112,7 @@ public class LightProtoMessage {
         w.println("        /** Serialize this message to a new byte array. */");
         w.println("        public byte[] toByteArray() {");
         w.println("            byte[] a = new byte[getSerializedSize()];");
-        w.println("            io.netty.buffer.ByteBuf b = io.netty.buffer.Unpooled.wrappedBuffer(a).writerIndex(0);");
-        w.println("            this.writeTo(b);");
+        w.println("            _writeTo(a, 0);");
         w.println("            return a;");
         w.println("        }");
 
@@ -125,6 +124,7 @@ public class LightProtoMessage {
 
 
         w.println("        private int _cachedSize;\n");
+        w.println("        private byte[] _scratch;\n");
         w.println("        private io.netty.buffer.ByteBuf _parsedBuffer;\n");
         w.println("    }");
         w.println();
@@ -236,23 +236,40 @@ public class LightProtoMessage {
         w.println("         * @return the number of bytes written");
         w.println("         */");
         w.format("        @Override public int writeTo(io.netty.buffer.ByteBuf _b) {\n");
+        w.format("            int _serializedSize = getSerializedSize();\n");
+        w.format("            if (_b.hasArray()) {\n");
+        // Heap buffers are written in place through their backing array.
+        // ensureWritable may replace the backing array, so it is resolved after.
+        w.format("                _b.ensureWritable(_serializedSize);\n");
+        w.format("                int _writeIdx = _b.writerIndex();\n");
+        w.format("                _writeTo(_b.array(), _b.arrayOffset() + _writeIdx);\n");
+        w.format("                _b.writerIndex(_writeIdx + _serializedSize);\n");
+        w.format("            } else {\n");
+        // Direct, composite and other buffers: compose in a scratch array cached
+        // on this (typically pooled) instance and transfer with a single bulk
+        // write. Plain byte[] stores compile to raw memory accesses on every JDK,
+        // unlike sun.misc.Unsafe accesses which carry a per-call deprecation
+        // check since JDK 24.
+        w.format("                byte[] _s = LightProtoCodec.scratchFor(this._scratch, _serializedSize);\n");
+        w.format("                if (_s.length <= LightProtoCodec.SCRATCH_RETAIN_MAX) {\n");
+        w.format("                    this._scratch = _s;\n");
+        w.format("                }\n");
+        w.format("                _writeTo(_s, 0);\n");
+        w.format("                _b.writeBytes(_s, 0, _serializedSize);\n");
+        w.format("            }\n");
+        w.format("            return _serializedSize;\n");
+        w.format("        }\n");
+
+        w.println("        /**");
+        w.println("         * Internal: serialize this message into the array starting at {@code _i};");
+        w.println("         * returns the index after the last byte written. Public only so that");
+        w.println("         * generated messages in other packages can serialize nested fields of this");
+        w.println("         * type into the same array.");
+        w.println("         */");
+        w.format("        public int _writeTo(byte[] _a, int _i) {\n");
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
-        w.format("            int _writeIdx = _b.writerIndex();\n");
-        w.format("            int _serializedSize = getSerializedSize();\n");
-        w.format("            _b.ensureWritable(_serializedSize);\n");
-        w.format("            Object _base;\n");
-        w.format("            long _addr;\n");
-        w.format("            long _baseOffset;\n");
-        w.format("            if (_b.hasMemoryAddress()) {\n");
-        w.format("                _base = null;\n");
-        w.format("                _baseOffset = _b.memoryAddress();\n");
-        w.format("            } else {\n");
-        w.format("                _base = _b.array();\n");
-        w.format("                _baseOffset = LightProtoCodec.BYTE_ARRAY_BASE_OFFSET + _b.arrayOffset();\n");
-        w.format("            }\n");
-        w.format("            _addr = _baseOffset + _writeIdx;\n");
         for (LightProtoField f : fields) {
             String condition = f.serializeCondition();
             if (condition != null) {
@@ -264,8 +281,7 @@ public class LightProtoMessage {
             }
         }
 
-        w.format("            _b.writerIndex(_writeIdx + _serializedSize);\n");
-        w.format("            return _serializedSize;\n");
+        w.format("            return _i;\n");
         w.format("        }\n");
     }
 

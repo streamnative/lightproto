@@ -145,17 +145,16 @@ public class LightProtoBytesField extends LightProtoField {
     @Override
     public void serialize(PrintWriter w) {
         w.format("%s;\n", writeTagExpr(tagName()));
-        w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sLen);\n", ccName);
-        w.format("_b.writerIndex((int)(_addr - _baseOffset));\n");
+        w.format("_i = LightProtoCodec.writeRawVarInt(_a, _i, _%sLen);\n", ccName);
         w.format("if (_%sIdx == -1) {\n", ccName);
         // Use the absolute-indexed copy so we don't mutate the source buffer's
         // readerIndex; that allows the message to be re-serialized (e.g. on
         // gRPC retry) and lets two fields safely alias the same backing buffer.
-        w.format("    %s.getBytes(%s.readerIndex(), _b, _%sLen);\n", ccName, ccName, ccName);
+        w.format("    %s.getBytes(%s.readerIndex(), _a, _i, _%sLen);\n", ccName, ccName, ccName);
         w.format("} else {\n");
-        w.format("    _parsedBuffer.getBytes(_%sIdx, _b, _%sLen);\n", ccName, ccName);
+        w.format("    _parsedBuffer.getBytes(_%sIdx, _a, _i, _%sLen);\n", ccName, ccName);
         w.format("}\n");
-        w.format("_addr = _baseOffset + _b.writerIndex();\n");
+        w.format("_i += _%sLen;\n", ccName);
     }
 
 

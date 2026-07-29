@@ -97,11 +97,11 @@ public class LightProtoMessageField extends LightProtoField {
 
     @Override
     public void serialize(PrintWriter w) {
+        // Nested messages write into the same array: no per-child ensureWritable,
+        // buffer-address resolution or writerIndex round-trips.
         w.format("%s;\n", writeTagExpr(tagName()));
-        w.format("_addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getSerializedSize());\n", ccName);
-        w.format("_b.writerIndex((int)(_addr - _baseOffset));\n");
-        w.format("%s.writeTo(_b);\n", ccName);
-        w.format("_addr = _baseOffset + _b.writerIndex();\n");
+        w.format("_i = LightProtoCodec.writeRawVarInt(_a, _i, %s.getSerializedSize());\n", ccName);
+        w.format("_i = %s._writeTo(_a, _i);\n", ccName);
     }
 
     @Override
