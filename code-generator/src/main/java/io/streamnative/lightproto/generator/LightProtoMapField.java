@@ -799,30 +799,30 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
     @Override
     public void serialize(PrintWriter w) {
-        w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
+        w.format("for (int _entryIdx = 0; _entryIdx < _%sCount; _entryIdx++) {\n", ccName);
 
         // Compute entry size
         w.format("    int _entrySize = 0;\n");
 
         // Key size: 1 (tag) + data size
         w.format("    _entrySize += 1;\n"); // key tag is always 1 byte
-        generateKeyDataSize(w, "_i");
+        generateKeyDataSize(w, "_entryIdx");
 
         // Value size: 1 (tag) + data size
         w.format("    _entrySize += 1;\n"); // value tag is always 1 byte
-        generateValueDataSize(w, "_i");
+        generateValueDataSize(w, "_entryIdx");
 
         // Write outer tag + entry size
         w.format("    %s;\n", writeTagExpr(tagName()));
-        w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _entrySize);\n");
+        w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _entrySize);\n");
 
         // Write key tag + key data
-        w.format("    _addr = LightProtoCodec.writeRawByte(_base, _addr, %s);\n", keyTagConstant());
-        generateSerializeKeyData(w, "_i");
+        w.format("    _i = LightProtoCodec.writeRawByte(_a, _i, %s);\n", keyTagConstant());
+        generateSerializeKeyData(w, "_entryIdx");
 
         // Write value tag + value data
-        w.format("    _addr = LightProtoCodec.writeRawByte(_base, _addr, %s);\n", valueTagConstant());
-        generateSerializeValueData(w, "_i");
+        w.format("    _i = LightProtoCodec.writeRawByte(_a, _i, %s);\n", valueTagConstant());
+        generateSerializeValueData(w, "_entryIdx");
 
         w.format("}\n");
     }
@@ -856,20 +856,12 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     private void generateSerializeKeyData(PrintWriter w, String idxVar) {
         if (isStringKey()) {
             w.format("    LightProtoCodec.StringHolder _ksh = _%sKeys[%s];\n", ccName, idxVar);
-            w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _ksh.len);\n");
+            w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _ksh.len);\n");
             w.format("    if (_ksh.idx == -1) {\n");
-            w.format("        long _r = LightProtoCodec.writeRawString(_base, _addr, _ksh.s, _ksh.len);\n");
-            w.format("        if (_r >= 0) {\n");
-            w.format("            _addr = _r;\n");
-            w.format("        } else {\n");
-            w.format("            _b.writerIndex((int)(_addr - _baseOffset));\n");
-            w.format("            LightProtoCodec.writeString(_b, _ksh.s, _ksh.len);\n");
-            w.format("            _addr = _baseOffset + _b.writerIndex();\n");
-            w.format("        }\n");
+            w.format("        _i = LightProtoCodec.writeRawString(_a, _i, _ksh.s, _ksh.len);\n");
             w.format("    } else {\n");
-            w.format("        _b.writerIndex((int)(_addr - _baseOffset));\n");
-            w.format("        _parsedBuffer.getBytes(_ksh.idx, _b, _ksh.len);\n");
-            w.format("        _addr = _baseOffset + _b.writerIndex();\n");
+            w.format("        _parsedBuffer.getBytes(_ksh.idx, _a, _i, _ksh.len);\n");
+            w.format("        _i += _ksh.len;\n");
             w.format("    }\n");
         } else {
             LightProtoNumberField.serializeNumber(w, keyField, String.format("_%sKeys[%s]", ccName, idxVar));
@@ -879,37 +871,26 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     private void generateSerializeValueData(PrintWriter w, String idxVar) {
         if (isStringValue()) {
             w.format("    LightProtoCodec.StringHolder _vsh = _%sValues[%s];\n", ccName, idxVar);
-            w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _vsh.len);\n");
+            w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _vsh.len);\n");
             w.format("    if (_vsh.idx == -1) {\n");
-            w.format("        long _r = LightProtoCodec.writeRawString(_base, _addr, _vsh.s, _vsh.len);\n");
-            w.format("        if (_r >= 0) {\n");
-            w.format("            _addr = _r;\n");
-            w.format("        } else {\n");
-            w.format("            _b.writerIndex((int)(_addr - _baseOffset));\n");
-            w.format("            LightProtoCodec.writeString(_b, _vsh.s, _vsh.len);\n");
-            w.format("            _addr = _baseOffset + _b.writerIndex();\n");
-            w.format("        }\n");
+            w.format("        _i = LightProtoCodec.writeRawString(_a, _i, _vsh.s, _vsh.len);\n");
             w.format("    } else {\n");
-            w.format("        _b.writerIndex((int)(_addr - _baseOffset));\n");
-            w.format("        _parsedBuffer.getBytes(_vsh.idx, _b, _vsh.len);\n");
-            w.format("        _addr = _baseOffset + _b.writerIndex();\n");
+            w.format("        _parsedBuffer.getBytes(_vsh.idx, _a, _i, _vsh.len);\n");
+            w.format("        _i += _vsh.len;\n");
             w.format("    }\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxVar);
-            w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _vbh.len);\n");
-            w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
+            w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _vbh.len);\n");
             w.format("    if (_vbh.idx == -1) {\n");
-            w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _b, _vbh.len);\n");
+            w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _a, _i, _vbh.len);\n");
             w.format("    } else {\n");
-            w.format("        _parsedBuffer.getBytes(_vbh.idx, _b, _vbh.len);\n");
+            w.format("        _parsedBuffer.getBytes(_vbh.idx, _a, _i, _vbh.len);\n");
             w.format("    }\n");
-            w.format("    _addr = _baseOffset + _b.writerIndex();\n");
+            w.format("    _i += _vbh.len;\n");
         } else if (isMessageValue()) {
-            w.format("    _addr = LightProtoCodec.writeRawVarInt(_base, _addr, _%sValues[%s].getSerializedSize());\n",
+            w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _%sValues[%s].getSerializedSize());\n",
                     ccName, idxVar);
-            w.format("    _b.writerIndex((int)(_addr - _baseOffset));\n");
-            w.format("    _%sValues[%s].writeTo(_b);\n", ccName, idxVar);
-            w.format("    _addr = _baseOffset + _b.writerIndex();\n");
+            w.format("    _i = _%sValues[%s]._writeTo(_a, _i);\n", ccName, idxVar);
         } else {
             LightProtoNumberField.serializeNumber(w, valueField, String.format("_%sValues[%s]", ccName, idxVar));
         }

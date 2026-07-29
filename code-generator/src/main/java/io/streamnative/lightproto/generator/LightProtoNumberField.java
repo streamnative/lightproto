@@ -48,33 +48,33 @@ public class LightProtoNumberField extends LightProtoField {
 
     static void serializeNumber(PrintWriter w, ProtoFieldDescriptor field, String name) {
         if (field.isEnumField()) {
-            w.format("                _addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s.getValue());\n", name);
+            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s.getValue());\n", name);
         } else if (field.getProtoType().equals("bool")) {
-            w.format("                _addr = LightProtoCodec.writeRawByte(_base, _addr, %s ? 1 : 0);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawByte(_a, _i, %s ? 1 : 0);\n", name);
         } else if (field.getProtoType().equals("int32")) {
-            w.format("                _addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("uint32")) {
-            w.format("                _addr = LightProtoCodec.writeRawVarInt(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("sint32")) {
-            w.format("                _addr = LightProtoCodec.writeRawSignedVarInt(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawSignedVarInt(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("sint64")) {
-            w.format("                _addr = LightProtoCodec.writeRawSignedVarInt64(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawSignedVarInt64(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("int64")) {
-            w.format("                _addr = LightProtoCodec.writeRawVarInt64(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawVarInt64(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("uint64")) {
-            w.format("                _addr = LightProtoCodec.writeRawVarInt64(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawVarInt64(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("fixed32")) {
-            w.format("                _addr = LightProtoCodec.writeRawLittleEndian32(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawLittleEndian32(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("fixed64")) {
-            w.format("                _addr = LightProtoCodec.writeRawLittleEndian64(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawLittleEndian64(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("sfixed32")) {
-            w.format("                _addr = LightProtoCodec.writeRawLittleEndian32(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawLittleEndian32(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("sfixed64")) {
-            w.format("                _addr = LightProtoCodec.writeRawLittleEndian64(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawLittleEndian64(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("double")) {
-            w.format("                _addr = LightProtoCodec.writeRawDouble(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawDouble(_a, _i, %s);\n", name);
         } else if (field.getProtoType().equals("float")) {
-            w.format("                _addr = LightProtoCodec.writeRawFloat(_base, _addr, %s);\n", name);
+            w.format("                _i = LightProtoCodec.writeRawFloat(_a, _i, %s);\n", name);
         } else {
             throw new IllegalArgumentException("Failed to write serializer for field: " + field.getProtoType());
         }
