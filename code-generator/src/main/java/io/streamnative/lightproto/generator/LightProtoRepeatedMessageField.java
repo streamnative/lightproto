@@ -65,7 +65,11 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     @Override
     public void parse(PrintWriter w) {
         w.format("int _%sSize = LightProtoCodec.readVarInt(_buffer);\n", ccName);
-        w.format("%s().parseFrom(_buffer, _%sSize);\n", Util.camelCase("add", singularName), ccName);
+        w.format("%s().parseFrom(_buffer, _%sSize);\n", addForParseName(), ccName);
+    }
+
+    private String addForParseName() {
+        return "_" + Util.camelCase("add", singularName, "for", "parse");
     }
 
     @Override
@@ -129,6 +133,15 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a new element to the {@code %s} list, returning the sub-message for population. */\n", field.getName());
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("add", singularName));
+        w.format("    %s _item = %s();\n", field.getJavaType(), addForParseName());
+        // clear() only resets the count, so a pooled instance from a previous cycle
+        // must be cleared before being handed out for population.
+        w.format("    _item.clear();\n");
+        w.format("    _cachedSize = -1;\n");
+        w.format("    return _item;\n");
+        w.format("}\n");
+
+        w.format("private %s %s() {\n", field.getJavaType(), addForParseName());
         w.format("    if (%s == null) {\n", pluralName);
         w.format("        %s = new %s[4];\n", pluralName, field.getJavaType());
         w.format("    }\n");
@@ -138,7 +151,6 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
         w.format("    if (%s[_%sCount] == null) {\n", pluralName, pluralName);
         w.format("        %s[_%sCount] = new %s();\n", pluralName, pluralName, field.getJavaType());
         w.format("    }\n");
-        w.format("    _cachedSize = -1;\n");
         w.format("    return %s[_%sCount++];\n", pluralName, pluralName);
         w.format("}\n");
 
@@ -168,9 +180,8 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
 
     @Override
     public void clear(PrintWriter w) {
-        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    %s[i].clear();\n", pluralName);
-        w.format("}\n");
+        // Pooled elements are NOT cleared here: parseFrom() clears them itself when
+        // reused by parsing, and addX() clears them when handed out for population.
         w.format("_%sCount = 0;\n", pluralName);
     }
 

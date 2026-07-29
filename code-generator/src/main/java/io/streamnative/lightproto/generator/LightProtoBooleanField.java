@@ -27,17 +27,32 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     public void getter(PrintWriter w) {
         w.format("        /** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("is", ccName));
+        w.format("            if (!(%s)) {\n", presenceCondition());
+        w.format("                return %s;\n", defaultValueExpr());
+        w.format("            }\n");
         w.format("            return %s;\n", ccName);
         w.format("        }\n");
     }
 
     @Override
-    public void clear(PrintWriter w) {
+    protected String defaultValueExpr() {
         if (field.isDefaultValueSet()) {
-            w.format("%s = %s;\n", ccName, field.getDefaultValueAsString());
-        } else {
-            w.format("%s = false;\n", ccName);
+            return field.getDefaultValueAsString();
         }
+        return "false";
+    }
+
+    @Override
+    protected String cmpValueExpr(String qualifier) {
+        if (field.hasImplicitPresence()) {
+            return qualifier + Util.camelCase("is", ccName) + "()";
+        }
+        return qualifier + ccName;
+    }
+
+    @Override
+    public void clear(PrintWriter w) {
+        // No value reset needed: the getter is guarded by the presence condition.
     }
 
     @Override
@@ -65,16 +80,16 @@ public class LightProtoBooleanField extends LightProtoNumberField {
 
     @Override
     public void equalsCode(PrintWriter w) {
-        w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
+        w.format("if (%s != %s) return false;\n", cmpValueExpr(""), cmpValueExpr("_other."));
     }
 
     @Override
     public void hashCodeCode(PrintWriter w) {
-        w.format("_h = 31 * _h + (%s ? 1231 : 1237);\n", ccName);
+        w.format("_h = 31 * _h + (%s ? 1231 : 1237);\n", cmpValueExpr(""));
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return ccName;
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + ccName;
     }
 }

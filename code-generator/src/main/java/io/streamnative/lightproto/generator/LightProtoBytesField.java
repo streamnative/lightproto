@@ -32,6 +32,9 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void parse(PrintWriter w) {
+        // Invalidate any stale buffer reference from a previous parse or set: clear()
+        // no longer resets it, so it must be dropped when the field is on the wire.
+        w.format("%s = null;\n", ccName);
         w.format("_%sLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sIdx = _buffer.readerIndex();\n", ccName);
         w.format("_buffer.skipBytes(_%sLen);\n", ccName);
@@ -65,13 +68,13 @@ public class LightProtoBytesField extends LightProtoField {
     public void getter(PrintWriter w) {
         w.format("/** Returns the size in bytes of the {@code %s} field. */\n", field.getName());
         w.format("public int %s() {\n", Util.camelCase("get", ccName, "size"));
-        w.format("    if (_%sLen < 0) { return 0; }\n", ccName);
+        w.format("    if (!(%s)) { return 0; }\n", presenceCondition());
         w.format("    return _%sLen;\n", ccName);
         w.format("}\n");
 
         w.format("/** Returns the {@code %s} field as a byte array. */\n", field.getName());
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
-        w.format("    if (_%sLen < 0) { return new byte[0]; }\n", ccName);
+        w.format("    if (!(%s)) { return new byte[0]; }\n", presenceCondition());
         w.format("    io.netty.buffer.ByteBuf _b = %s();\n", Util.camelCase("get", ccName, "slice"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
         w.format("    _b.getBytes(0, res);\n");
@@ -80,7 +83,7 @@ public class LightProtoBytesField extends LightProtoField {
 
         w.format("/** Returns the {@code %s} field as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
-        w.format("    if (_%sLen < 0) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", ccName);
+        w.format("    if (!(%s)) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", presenceCondition());
         w.format("    if (%s == null) {\n", ccName);
         w.format("        return _parsedBuffer.slice(_%sIdx, _%sLen);\n", ccName, ccName);
         w.format("    } else {\n");
@@ -90,15 +93,14 @@ public class LightProtoBytesField extends LightProtoField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return "_" + ccName + "Len > 0";
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + "_" + ccName + "Len > 0";
     }
 
     @Override
     public void clear(PrintWriter w) {
-        w.format("%s = null;\n", ccName);
-        w.format("_%sIdx = -1;\n", ccName);
-        w.format("_%sLen = -1;\n", ccName);
+        // No value reset needed: the getters are guarded by the presence condition, and
+        // parse() invalidates the stale buffer reference for fields present on the wire.
     }
 
     @Override
@@ -159,7 +161,9 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void materialize(PrintWriter w) {
-        w.format("if (_%sIdx >= 0) {\n", ccName);
+        // The presence guard is required: an absent field may hold a stale buffer
+        // index from an earlier parse of a buffer that has since been released.
+        w.format("if ((%s) && _%sIdx >= 0) {\n", presenceCondition(), ccName);
         w.format("    byte[] _tmp = new byte[_%sLen];\n", ccName);
         w.format("    _parsedBuffer.getBytes(_%sIdx, _tmp);\n", ccName);
         w.format("    %s = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n", ccName);
