@@ -37,6 +37,8 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     @Override
     public void parse(PrintWriter w) {
         w.format("LightProtoCodec.StringHolder _%sSh = _%sStringHolder();\n", ccName, Util.camelCase("new", singularName));
+        // The holder may be pooled from a previous parse: drop its stale decoded String.
+        w.format("_%sSh.s = null;\n", ccName);
         w.format("_%sSh.len = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sSh.idx = _buffer.readerIndex();\n", ccName);
         w.format("_buffer.skipBytes(_%sSh.len);\n", ccName);
@@ -204,12 +206,8 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
 
     @Override
     public void clear(PrintWriter w) {
-        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);
-        w.format("    _sh.s = null;\n");
-        w.format("    _sh.idx = -1;\n");
-        w.format("    _sh.len = -1;\n");
-        w.format("}\n");
+        // Holders beyond the count are unreachable, and both parse() and add() write
+        // the complete holder state, so no per-element reset is needed.
         w.format("_%sCount = 0;\n", pluralName);
     }
 

@@ -58,15 +58,13 @@ public class LightProtoStringField extends LightProtoField {
     public void getter(PrintWriter w) {
         w.format("/** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
-        if (field.hasImplicitPresence()) {
-            w.format("    if (_%sBufferLen < 0) {\n", ccName);
+        w.format("    if (!(%s)) {\n", presenceCondition());
+        if (field.isDefaultValueSet()) {
+            w.format("        return \"%s\";\n", field.getDefaultValue());
+        } else {
             w.format("        return \"\";\n");
-            w.format("    }\n");
-        } else if (!field.isDefaultValueSet()) {
-            w.format("    if (!%s()) {\n", Util.camelCase("has", ccName));
-            w.format("        return \"\";\n");
-            w.format("    }\n");
         }
+        w.format("    }\n");
         w.format("    if (%s == null) {\n", camelCase(field.getName()));
         w.format("        %s = LightProtoCodec.readString(_parsedBuffer, _%sBufferIdx, _%sBufferLen);\n", ccName, ccName, ccName);
         w.format("    }\n");
@@ -81,9 +79,8 @@ public class LightProtoStringField extends LightProtoField {
 
     @Override
     public void clear(PrintWriter w) {
-        w.format("%s = %s;\n", ccName, field.getDefaultValue());
-        w.format("_%sBufferIdx = -1;\n", ccName);
-        w.format("_%sBufferLen = -1;\n", ccName);
+        // No value reset needed: the getter is guarded by the presence condition, and
+        // parse() invalidates the cached decoded String for fields present on the wire.
     }
 
     @Override
@@ -139,6 +136,9 @@ public class LightProtoStringField extends LightProtoField {
 
     @Override
     public void parse(PrintWriter w) {
+        // Invalidate any stale decoded String from a previous parse or set: clear()
+        // no longer resets it, so it must be dropped when the field is on the wire.
+        w.format("%s = null;\n", ccName);
         w.format("_%sBufferLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sBufferIdx = _buffer.readerIndex();\n", ccName);
         w.format("_buffer.skipBytes(_%sBufferLen);\n", ccName);
@@ -146,7 +146,9 @@ public class LightProtoStringField extends LightProtoField {
 
     @Override
     public void materialize(PrintWriter w) {
-        w.format("if (_%sBufferIdx >= 0) {\n", ccName);
+        // The presence guard is required: an absent field may hold a stale buffer
+        // index from an earlier parse of a buffer that has since been released.
+        w.format("if ((%s) && _%sBufferIdx >= 0) {\n", presenceCondition(), ccName);
         w.format("    %s = LightProtoCodec.readString(_parsedBuffer, _%sBufferIdx, _%sBufferLen);\n", ccName, ccName, ccName);
         w.format("    _%sBufferIdx = -1;\n", ccName);
         w.format("}\n");

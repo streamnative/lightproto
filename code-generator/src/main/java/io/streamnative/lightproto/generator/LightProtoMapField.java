@@ -384,6 +384,15 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // Ensure capacity before parsing (message values parse directly into the array)
         w.format("_ensure%sCapacity();\n", Util.camelCaseFirstUpper(ccName));
+        if (isMessageValue()) {
+            // Reset the pooled slot up front: if the entry's value field is absent from
+            // the wire, the slot must yield defaults, not data from a previous cycle.
+            w.format("if (_%sValues[_%sCount] == null) {\n", ccName, ccName);
+            w.format("    _%sValues[_%sCount] = new %s();\n", ccName, ccName, valueField.getJavaType());
+            w.format("} else {\n");
+            w.format("    _%sValues[_%sCount].clear();\n", ccName, ccName);
+            w.format("}\n");
+        }
 
         // Parse entry fields
         w.format("while (_buffer.readerIndex() < _%sEntryEnd) {\n", ccName);
@@ -450,10 +459,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("            _%sValueIdx = _buffer.readerIndex();\n", ccName);
             w.format("            _buffer.skipBytes(_%sValueLen);\n", ccName);
         } else if (isMessageValue()) {
+            // The slot was already allocated and reset right after _ensureCapacity().
             w.format("            int _%sMsgSize = LightProtoCodec.readVarInt(_buffer);\n", ccName);
-            w.format("            if (_%sValues[_%sCount] == null) {\n", ccName, ccName);
-            w.format("                _%sValues[_%sCount] = new %s();\n", ccName, ccName, valueField.getJavaType());
-            w.format("            }\n");
             w.format("            _%sValues[_%sCount].parseFrom(_buffer, _%sMsgSize);\n", ccName, ccName, ccName);
         } else {
             w.format("            _%sValue = %s;\n", ccName, LightProtoNumberField.parseNumber(valueField));
@@ -970,33 +977,10 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
     @Override
     public void clear(PrintWriter w) {
-        if (isStringKey()) {
-            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-            w.format("    LightProtoCodec.StringHolder _sh = _%sKeys[_i];\n", ccName);
-            w.format("    _sh.s = null;\n");
-            w.format("    _sh.idx = -1;\n");
-            w.format("    _sh.len = -1;\n");
-            w.format("}\n");
-        }
-        if (isStringValue()) {
-            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-            w.format("    LightProtoCodec.StringHolder _sh = _%sValues[_i];\n", ccName);
-            w.format("    _sh.s = null;\n");
-            w.format("    _sh.idx = -1;\n");
-            w.format("    _sh.len = -1;\n");
-            w.format("}\n");
-        } else if (isBytesValue()) {
-            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-            w.format("    LightProtoCodec.BytesHolder _bh = _%sValues[_i];\n", ccName);
-            w.format("    _bh.b = null;\n");
-            w.format("    _bh.idx = -1;\n");
-            w.format("    _bh.len = -1;\n");
-            w.format("}\n");
-        } else if (isMessageValue()) {
-            w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
-            w.format("    _%sValues[_i].clear();\n", ccName);
-            w.format("}\n");
-        }
+        // Entries beyond the count are unreachable. Both parse() and put() write the
+        // complete key/value holder state (including nulling stale s/b references),
+        // and message values are cleared by parseFrom()/put() when slots are reused,
+        // so no per-entry reset is needed here.
         w.format("_%sCount = 0;\n", ccName);
         w.format("_%sIndex = null;\n", ccName);
     }

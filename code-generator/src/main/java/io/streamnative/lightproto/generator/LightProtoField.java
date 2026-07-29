@@ -91,7 +91,11 @@ public abstract class LightProtoField {
         w.format("        private static final int %s = %d;\n", fieldNumber(), field.getNumber());
         w.format("        private static final int %s = (%s << LightProtoCodec.TAG_TYPE_BITS) | %s;\n", tagName(), fieldNumber(), typeTag());
         w.format("        private static final int %s_SIZE = LightProtoCodec.computeVarIntSize(%s);\n", tagName(), tagName());
-        if (!field.isRepeated() && !field.isOneofMember() && !field.hasImplicitPresence()) {
+        // Presence bits are tracked for all non-repeated, non-oneof fields. For proto3
+        // implicit-presence fields the bit is internal (no has() method): it marks that the
+        // field was written since the last clear(), so clear() does not need to physically
+        // reset field values.
+        if (!field.isRepeated() && !field.isOneofMember()) {
             w.format("        private static final int %s = 1 << (%d %% 32);\n", fieldMask(), index);
         }
     }
@@ -115,16 +119,16 @@ public abstract class LightProtoField {
     public void fieldClear(PrintWriter w, String enclosingType) {
         w.format("        /** Clear the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));
+        // The value clear must run while presence is still set: message-field clear()
+        // is guarded by has(), so clearing the presence first would leave a stale child.
         if (field.isOneofMember()) {
             w.format("            if (_%sCase == %s) {\n", Util.camelCase(field.getOneofName()), fieldNumber());
+            clear(w);
             w.format("                _%sCase = 0;\n", Util.camelCase(field.getOneofName()));
-            clear(w);
             w.format("            }\n");
-        } else if (!field.hasImplicitPresence()) {
-            w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
-            clear(w);
         } else {
             clear(w);
+            w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
         }
         w.format("            return this;\n");
         w.format("        }\n");
@@ -219,13 +223,24 @@ public abstract class LightProtoField {
         return index / 32;
     }
 
-    protected void writeSetPresence(PrintWriter w) {
-        if (field.hasImplicitPresence()) {
-            return; // No presence tracking for proto3 implicit presence
+    /**
+     * Returns the Java expression that is true when this (non-repeated) field is present:
+     * the oneof case check for oneof members, otherwise the presence bit check. Getters use
+     * this to return defaults for absent fields, since clear() no longer resets field values.
+     */
+    protected String presenceCondition() {
+        if (field.isOneofMember()) {
+            return String.format("_%sCase == %s", Util.camelCase(field.getOneofName()), fieldNumber());
         }
+        return String.format("(_bitField%d & %s) != 0", bitFieldIndex(), fieldMask());
+    }
+
+    protected void writeSetPresence(PrintWriter w) {
         if (field.isOneofMember()) {
             w.format("    _%sCase = %s;\n", Util.camelCase(field.getOneofName()), fieldNumber());
         } else {
+            // Also set for proto3 implicit presence: the internal bit guards against
+            // stale values surviving an O(1) clear().
             w.format("    _bitField%d |= %s;\n", bitFieldIndex(), fieldMask());
         }
     }
@@ -239,7 +254,9 @@ public abstract class LightProtoField {
             return null;
         }
         if (field.hasImplicitPresence()) {
-            return nonDefaultCondition();
+            // The presence bit guards against stale values after an O(1) clear();
+            // the non-default check preserves proto3 semantics (defaults not emitted).
+            return presenceCondition() + " && " + nonDefaultCondition();
         }
         return Util.camelCase("has", field.getName()) + "()";
     }

@@ -150,7 +150,9 @@ public class LightProtoMessage {
                 if (field.isOneofMember()) {
                     w.format("                    _%sCase = %s;\n",
                             Util.camelCase(field.field.getOneofName()), field.fieldNumber());
-                } else if (!field.field.hasImplicitPresence()) {
+                } else {
+                    // Also set for implicit-presence fields: the internal bit guards
+                    // against stale values surviving the O(1) clear().
                     w.format("                    _bitField%d |= %s;\n", field.bitFieldIndex(), field.fieldMask());
                 }
             }
@@ -209,8 +211,11 @@ public class LightProtoMessage {
             if (f.isRepeated()) {
                 f.copy(w);
             } else if (f.field.hasImplicitPresence()) {
-                // Always copy for proto3 implicit presence — no has() to check
+                // No public has() — guard on the other message's internal presence bit,
+                // since its field value may be stale when the bit is unset.
+                w.format("    if ((_other._bitField%d & %s) != 0) {\n", f.bitFieldIndex(), f.fieldMask());
                 f.copy(w);
+                w.format("    }\n");
             } else {
                 w.format("    if (_other.%s()) {\n", Util.camelCase("has", f.ccName));
                 f.copy(w);
@@ -481,7 +486,26 @@ public class LightProtoMessage {
                 }
             });
             w.println(";");
+            if (hasExplicitPresenceFieldsInWord(i)) {
+                // Bits of explicit-presence fields only: implicit-presence bits are an
+                // internal detail (set-since-clear) and must not affect equals/hashCode.
+                w.format("private static final int _PRESENCE_CMP_MASK%d = 0", i);
+                fields.forEach(f -> {
+                    if (isExplicitPresence(f) && f.index() / 32 == idx) {
+                        w.format(" | %s", f.fieldMask());
+                    }
+                });
+                w.println(";");
+            }
         }
+    }
+
+    private static boolean isExplicitPresence(LightProtoField f) {
+        return !f.isRepeated() && !f.isOneofMember() && !f.field.hasImplicitPresence();
+    }
+
+    private boolean hasExplicitPresenceFieldsInWord(int word) {
+        return fields.stream().anyMatch(f -> isExplicitPresence(f) && f.index() / 32 == word);
     }
 
     private void generateCheckRequiredFields(PrintWriter w) {
@@ -543,9 +567,14 @@ public class LightProtoMessage {
         w.format("            if (!(_o instanceof %s)) return false;\n", message.getName());
         w.format("            %s _other = (%s) _o;\n", message.getName(), message.getName());
 
-        // Fast-path: compare bitfields (explicit presence)
+        // Fast-path: compare bitfields, masked to explicit-presence fields. Implicit
+        // bits are excluded: "never set" and "explicitly set to the default" must
+        // compare equal under proto3 semantics.
         for (int i = 0; i < bitFieldsCount(); i++) {
-            w.format("            if (_bitField%d != _other._bitField%d) return false;\n", i, i);
+            if (hasExplicitPresenceFieldsInWord(i)) {
+                w.format("            if ((_bitField%d & _PRESENCE_CMP_MASK%d) != (_other._bitField%d & _PRESENCE_CMP_MASK%d)) return false;\n",
+                        i, i, i, i);
+            }
         }
 
         // Compare oneof cases
@@ -584,9 +613,12 @@ public class LightProtoMessage {
         w.format("        @Override public int hashCode() {\n");
         w.format("            int _h = 0;\n");
 
-        // Include bitfields in hash
+        // Include bitfields in hash, masked to explicit-presence fields (implicit
+        // bits must not affect the hash — see equals()).
         for (int i = 0; i < bitFieldsCount(); i++) {
-            w.format("            _h = 31 * _h + _bitField%d;\n", i);
+            if (hasExplicitPresenceFieldsInWord(i)) {
+                w.format("            _h = 31 * _h + (_bitField%d & _PRESENCE_CMP_MASK%d);\n", i, i);
+            }
         }
 
         // Include oneof cases in hash

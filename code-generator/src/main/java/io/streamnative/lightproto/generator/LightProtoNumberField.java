@@ -168,8 +168,18 @@ public class LightProtoNumberField extends LightProtoField {
     public void getter(PrintWriter w) {
         w.format("        /** Returns the value of the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", field.getJavaType(), Util.camelCase("get", field.getName()));
+        w.format("            if (!(%s)) {\n", presenceCondition());
+        w.format("                return %s;\n", defaultValueExpr());
+        w.format("            }\n");
         w.format("            return %s;\n", ccName);
         w.format("        }\n");
+    }
+
+    protected String defaultValueExpr() {
+        if (field.isDefaultValueSet()) {
+            return field.getDefaultValueAsString();
+        }
+        return "0";
     }
 
     @Override
@@ -279,11 +289,8 @@ public class LightProtoNumberField extends LightProtoField {
 
     @Override
     public void clear(PrintWriter w) {
-        if (field.isDefaultValueSet()) {
-            w.format("%s = %s;\n", ccName, field.getDefaultValueAsString());
-        } else {
-            w.format("%s = 0;\n", ccName);
-        }
+        // No value reset needed: the getter returns the default while the presence
+        // bit (or oneof case) is unset, and parse/set always overwrite the value.
     }
 
     @Override
@@ -313,30 +320,45 @@ public class LightProtoNumberField extends LightProtoField {
         }
     }
 
+    /**
+     * Expression for this field's value in equals/hashCode. Implicit-presence fields may
+     * hold stale values when their internal presence bit is unset, so their effective
+     * value is read through the getter (which applies the presence guard).
+     */
+    protected String cmpValueExpr(String qualifier) {
+        if (field.hasImplicitPresence()) {
+            return qualifier + Util.camelCase("get", field.getName()) + "()";
+        }
+        return qualifier + ccName;
+    }
+
     @Override
     public void equalsCode(PrintWriter w) {
         String type = field.getProtoType();
+        String v = cmpValueExpr("");
+        String o = cmpValueExpr("_other.");
         if (type.equals("float")) {
-            w.format("if (Float.floatToIntBits(%s) != Float.floatToIntBits(_other.%s)) return false;\n", ccName, ccName);
+            w.format("if (Float.floatToIntBits(%s) != Float.floatToIntBits(%s)) return false;\n", v, o);
         } else if (type.equals("double")) {
-            w.format("if (Double.doubleToLongBits(%s) != Double.doubleToLongBits(_other.%s)) return false;\n", ccName, ccName);
+            w.format("if (Double.doubleToLongBits(%s) != Double.doubleToLongBits(%s)) return false;\n", v, o);
         } else {
-            w.format("if (%s != _other.%s) return false;\n", ccName, ccName);
+            w.format("if (%s != %s) return false;\n", v, o);
         }
     }
 
     @Override
     public void hashCodeCode(PrintWriter w) {
         String type = field.getProtoType();
+        String v = cmpValueExpr("");
         if (type.equals("float")) {
-            w.format("_h = 31 * _h + Float.floatToIntBits(%s);\n", ccName);
+            w.format("_h = 31 * _h + Float.floatToIntBits(%s);\n", v);
         } else if (type.equals("double")) {
-            w.format("_h = 31 * _h + Long.hashCode(Double.doubleToLongBits(%s));\n", ccName);
+            w.format("_h = 31 * _h + Long.hashCode(Double.doubleToLongBits(%s));\n", v);
         } else if (type.equals("int64") || type.equals("uint64") || type.equals("sint64")
                 || type.equals("fixed64") || type.equals("sfixed64")) {
-            w.format("_h = 31 * _h + Long.hashCode(%s);\n", ccName);
+            w.format("_h = 31 * _h + Long.hashCode(%s);\n", v);
         } else {
-            w.format("_h = 31 * _h + %s;\n", ccName);
+            w.format("_h = 31 * _h + %s;\n", v);
         }
     }
 
