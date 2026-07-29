@@ -89,7 +89,7 @@ public class LightProtoBooleanField extends LightProtoNumberField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return ccName;
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + ccName;
     }
 }

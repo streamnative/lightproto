@@ -294,8 +294,8 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return ccName + " != 0";
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + ccName + " != 0";
     }
 
     static int fixedDataSize(ProtoFieldDescriptor field) {

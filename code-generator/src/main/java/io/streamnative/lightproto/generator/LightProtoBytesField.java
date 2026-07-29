@@ -93,8 +93,8 @@ public class LightProtoBytesField extends LightProtoField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return "_" + ccName + "Len > 0";
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + "_" + ccName + "Len > 0";
     }
 
     @Override

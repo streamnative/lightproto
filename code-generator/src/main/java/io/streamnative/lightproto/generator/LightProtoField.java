@@ -256,16 +256,17 @@ public abstract class LightProtoField {
         if (field.hasImplicitPresence()) {
             // The presence bit guards against stale values after an O(1) clear();
             // the non-default check preserves proto3 semantics (defaults not emitted).
-            return presenceCondition() + " && " + nonDefaultCondition();
+            return presenceCondition() + " && " + nonDefaultCondition("");
         }
         return Util.camelCase("has", field.getName()) + "()";
     }
 
     /**
-     * Returns the Java expression that is true when this field has a non-default value.
+     * Returns the Java expression that is true when this field's value, qualified by the
+     * given prefix (e.g. "_other."), is not the proto3 default.
      * Only called for proto3 implicit presence fields.
      */
-    protected String nonDefaultCondition() {
+    protected String nonDefaultCondition(String qualifier) {
         throw new UnsupportedOperationException("nonDefaultCondition not implemented for " + getClass().getSimpleName());
     }
 

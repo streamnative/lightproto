@@ -211,9 +211,12 @@ public class LightProtoMessage {
             if (f.isRepeated()) {
                 f.copy(w);
             } else if (f.field.hasImplicitPresence()) {
-                // No public has() — guard on the other message's internal presence bit,
-                // since its field value may be stale when the bit is unset.
-                w.format("    if ((_other._bitField%d & %s) != 0) {\n", f.bitFieldIndex(), f.fieldMask());
+                // No public has() — guard on the other message's internal presence bit
+                // (its field value may be stale when the bit is unset) AND on the value
+                // being non-default: proto3 merge semantics treat set-to-default as
+                // unset, so it must not overwrite a non-default target value.
+                w.format("    if ((_other._bitField%d & %s) != 0 && %s) {\n",
+                        f.bitFieldIndex(), f.fieldMask(), f.nonDefaultCondition("_other."));
                 f.copy(w);
                 w.format("    }\n");
             } else {

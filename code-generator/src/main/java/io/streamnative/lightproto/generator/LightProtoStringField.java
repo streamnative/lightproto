@@ -73,8 +73,8 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return "_" + ccName + "BufferLen > 0";
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + "_" + ccName + "BufferLen > 0";
     }
 
     @Override

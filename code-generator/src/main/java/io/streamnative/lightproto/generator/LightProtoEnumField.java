@@ -102,7 +102,7 @@ public class LightProtoEnumField extends LightProtoNumberField {
     }
 
     @Override
-    protected String nonDefaultCondition() {
-        return ccName + ".getValue() != 0";
+    protected String nonDefaultCondition(String qualifier) {
+        return qualifier + ccName + ".getValue() != 0";
     }
 }

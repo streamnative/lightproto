@@ -281,6 +281,32 @@ public class InstanceReuseTest {
     }
 
     @Test
+    public void testCopyFromTreatsSetToDefaultAsUnset() {
+        // proto3 merge semantics: a source field explicitly set to its default must not
+        // overwrite a non-default target value (same as protobuf-java mergeFrom, and
+        // consistent with the field not being serialized on the wire)
+        Proto3Message src = new Proto3Message();
+        src.setIntField(0);
+        src.setStringField("");
+        src.setBoolField(false);
+
+        Proto3Message target = new Proto3Message();
+        target.setIntField(7);
+        target.setStringField("keep");
+        target.setBoolField(true);
+        target.copyFrom(src);
+        assertEquals(7, target.getIntField());
+        assertEquals("keep", target.getStringField());
+        assertTrue(target.isBoolField());
+
+        // Non-default source values do overwrite
+        src.setIntField(5);
+        target.copyFrom(src);
+        assertEquals(5, target.getIntField());
+        assertEquals("keep", target.getStringField());
+    }
+
+    @Test
     public void testCopyFromReusedInstance() {
         Proto3Message src = new Proto3Message();
         src.parseFrom(new Proto3Message().setIntField(5).setStringField("x").toByteArray());
