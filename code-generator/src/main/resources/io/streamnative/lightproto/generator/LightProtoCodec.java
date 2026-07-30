@@ -15,6 +15,7 @@
  */
 package io.streamnative.lightproto.generator;
 
+import io.netty.buffer.AbstractByteBuf;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
 
@@ -188,10 +189,22 @@ class LightProtoCodec {
     }
 
     static int readFixedInt32(ByteBuf b) {
+        if (b instanceof AbstractByteBuf) {
+            AbstractByteBuf a = (AbstractByteBuf) b;
+            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 4) {
+                return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt32Unchecked(a);
+            }
+        }
         return b.readIntLE();
     }
 
     static long readFixedInt64(ByteBuf b) {
+        if (b instanceof AbstractByteBuf) {
+            AbstractByteBuf a = (AbstractByteBuf) b;
+            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 8) {
+                return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt64Unchecked(a);
+            }
+        }
         return b.readLongLE();
     }
 
@@ -217,6 +230,15 @@ class LightProtoCodec {
     }
 
     static int readVarInt(ByteBuf buf) {
+        // With >= 10 readable bytes a varint cannot overrun the buffer, so the
+        // per-byte readByte() checks (accessibility + bounds + an index store per
+        // byte) can be skipped entirely via the unchecked accessors.
+        if (buf instanceof AbstractByteBuf) {
+            AbstractByteBuf a = (AbstractByteBuf) buf;
+            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 10) {
+                return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarIntUnchecked(a);
+            }
+        }
         byte tmp = buf.readByte();
         if (tmp >= 0) {
             return tmp;
@@ -251,6 +273,12 @@ class LightProtoCodec {
     }
 
     static long readVarInt64(ByteBuf buf) {
+        if (buf instanceof AbstractByteBuf) {
+            AbstractByteBuf a = (AbstractByteBuf) buf;
+            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 10) {
+                return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked(a);
+            }
+        }
         long result;
         byte tmp = buf.readByte();
         if (tmp >= 0) {
