@@ -207,6 +207,70 @@ public class LightProtoMessage {
         return bitGuardedMessageFields().size() >= BIT_DRIVEN_CLEAR_THRESHOLD;
     }
 
+    // Below this field count the plain guard walk is cheaper than the loop.
+    private static final int BIT_DRIVEN_TRAVERSAL_THRESHOLD = 8;
+
+    /**
+     * Whether serialization and size computation can iterate presence bits instead
+     * of walking every field's guard. Requires every field to carry a presence bit
+     * (no repeated, map or oneof fields): set-bit iteration yields ascending field
+     * indexes, so output order — and therefore the emitted bytes — stay identical
+     * to the declaration-order guard walk only when all fields participate.
+     */
+    private boolean useBitDrivenTraversal() {
+        if (fields.size() < BIT_DRIVEN_TRAVERSAL_THRESHOLD) {
+            return false;
+        }
+        for (LightProtoField f : fields) {
+            if (f.isRepeated() || f.isOneofMember()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Residual per-field condition once the presence bit is implied by the set-bit
+     * loop: proto3 implicit-presence fields still skip default values; everything
+     * else serializes unconditionally when present.
+     */
+    private static String residualSerializeCondition(LightProtoField f) {
+        return f.field.hasImplicitPresence() ? f.nonDefaultCondition("") : null;
+    }
+
+    /** Emit the per-word set-bit loops, delegating each field's body to the consumer. */
+    private void emitBitDrivenTraversal(PrintWriter w, java.util.function.Consumer<LightProtoField> body) {
+        for (int word = 0; word < bitFieldsCount(); word++) {
+            final int wordIdx = word;
+            List<LightProtoField> inWord = fields.stream()
+                    .filter(f -> f.index() / 32 == wordIdx)
+                    .collect(Collectors.toList());
+            if (inWord.isEmpty()) {
+                continue;
+            }
+            w.format("            int _fBits%d = _bitField%d;\n", word, word);
+            w.format("            while (_fBits%d != 0) {\n", word);
+            w.format("                int _fIdx = Integer.numberOfTrailingZeros(_fBits%d);\n", word);
+            w.format("                _fBits%d &= _fBits%d - 1;\n", word, word);
+            w.format("                switch (_fIdx) {\n");
+            for (LightProtoField f : inWord) {
+                w.format("                case %d: {\n", f.index() % 32);
+                String residual = residualSerializeCondition(f);
+                if (residual != null) {
+                    w.format("                    if (%s) {\n", residual);
+                    body.accept(f);
+                    w.format("                    }\n");
+                } else {
+                    body.accept(f);
+                }
+                w.format("                    break;\n");
+                w.format("                }\n");
+            }
+            w.format("                }\n");
+            w.format("            }\n");
+        }
+    }
+
     private void generateClear(PrintWriter w) {
         w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
         w.format("        public %s clear() {\n", message.getName());
@@ -327,14 +391,22 @@ public class LightProtoMessage {
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
-        for (LightProtoField f : fields) {
-            String condition = f.serializeCondition();
-            if (condition != null) {
-                w.format("            if (%s) {\n", condition);
-                f.serialize(w);
-                w.format("            }\n");
-            } else {
-                f.serialize(w);
+        if (useBitDrivenTraversal()) {
+            // Iterate only the fields that are present instead of testing every
+            // guard: set bits ascend, so the output order (and bytes) match the
+            // declaration-order guard walk. Required fields always have their bit
+            // set here — checkRequiredFields() has already thrown otherwise.
+            emitBitDrivenTraversal(w, f -> f.serialize(w));
+        } else {
+            for (LightProtoField f : fields) {
+                String condition = f.serializeCondition();
+                if (condition != null) {
+                    w.format("            if (%s) {\n", condition);
+                    f.serialize(w);
+                    w.format("            }\n");
+                } else {
+                    f.serialize(w);
+                }
             }
         }
 
@@ -351,16 +423,23 @@ public class LightProtoMessage {
         w.format("\n");
 
         w.format("    int _size = 0;\n");
-        fields.forEach(field -> {
-            String condition = field.serializeCondition();
-            if (condition != null) {
-                w.format("        if (%s) {\n", condition);
-                field.serializedSize(w);
-                w.format("        }\n");
-            } else {
-                field.serializedSize(w);
-            }
-        });
+        if (useBitDrivenTraversal()) {
+            // Same set-bit traversal as _writeTo: the two must agree exactly on
+            // which fields contribute, since writeTo() writes into an array sized
+            // by this method.
+            emitBitDrivenTraversal(w, f -> f.serializedSize(w));
+        } else {
+            fields.forEach(field -> {
+                String condition = field.serializeCondition();
+                if (condition != null) {
+                    w.format("        if (%s) {\n", condition);
+                    field.serializedSize(w);
+                    w.format("        }\n");
+                } else {
+                    field.serializedSize(w);
+                }
+            });
+        }
 
         w.format("            _cachedSize = _size;\n");
         w.format("            return _size;\n");
