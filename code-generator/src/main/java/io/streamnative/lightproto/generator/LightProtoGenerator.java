@@ -96,6 +96,10 @@ public class LightProtoGenerator {
             String accessClassName = "LightProtoByteBufAccess_" + javaPackage.replace('.', '_');
             try (InputStream is = LightProtoGenerator.class.getResourceAsStream(
                     "/io/streamnative/lightproto/generator/LightProtoByteBufAccess.java")) {
+                if (is == null) {
+                    throw new IllegalStateException(
+                            "LightProtoByteBufAccess.java template not found on the classpath");
+                }
                 String accessSource = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8)
                         .replace("LightProtoByteBufAccessTemplate", accessClassName);
                 Path nettyDir = Paths.get(String.format("%s/io/netty/buffer", outputDirectory));

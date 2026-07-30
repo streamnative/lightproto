@@ -25,8 +25,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Truncated input must throw IndexOutOfBoundsException: heap buffers fail
- * safely on array bounds, and for direct buffers the unchecked readers overrun
- * by at most 9 bytes before the post-parse limit check detects it.
+ * safely on array bounds, and for pooled direct buffers the unchecked readers
+ * overrun by at most 9 bytes inside the arena chunk before the post-parse
+ * limit check detects it. (Exactly-sized unpooled unsafe direct buffers are
+ * outside this guarantee — see the readVarInt64() notes in LightProtoCodec.)
  */
 public class TruncatedInputTest {
 
@@ -76,6 +78,33 @@ public class TruncatedInputTest {
         // the checked skipBytes() catches this
         byte[] data = {0x32, 0x05, 'a', 'b'};
         assertThrowsOnAllBufferTypes(data);
+    }
+
+    @Test
+    public void testTruncatedVarint64InMapValue() {
+        // MapInt64Message has no top-level 64-bit field: only the map value type
+        // routes through readVarInt64(), so this exercises the check emission
+        // driven by map key/value types. counters entry: key "k", value varint64
+        // truncated at the end of the buffer.
+        byte[] data = {0x0A, 0x06, 0x0A, 0x01, 'k', 0x10, (byte) 0xFF, (byte) 0xFF};
+
+        assertThrows(IndexOutOfBoundsException.class,
+                () -> new MapInt64Message().parseFrom(data));
+
+        ByteBuf pooled = PooledByteBufAllocator.DEFAULT.directBuffer(data.length);
+        try {
+            pooled.writeBytes(data);
+            assertThrows(IndexOutOfBoundsException.class,
+                    () -> new MapInt64Message().parseFrom(pooled, pooled.readableBytes()));
+        } finally {
+            pooled.release();
+        }
+
+        // Sanity: the same entry with a complete varint64 parses
+        byte[] valid = {0x0A, 0x06, 0x0A, 0x01, 'k', 0x10, (byte) 0xB9, 0x60};
+        MapInt64Message parsed = new MapInt64Message();
+        parsed.parseFrom(valid);
+        assertEquals(1, parsed.getCountersCount());
     }
 
     @Test

@@ -23,8 +23,9 @@ package io.netty.buffer;
  * each varint performs a single {@code readerIndex} store instead of one per byte.
  *
  * <p>Reads are not bounds-checked here: on truncated input a read may advance up
- * to 10 bytes past the intended message limit. The generated {@code parseFrom()}
- * detects that afterwards and throws, preserving the throw-on-truncated contract.
+ * to 9 bytes past the intended message limit (a 10-byte read whose first byte is
+ * inside the limit). The generated {@code parseFrom()} detects that afterwards
+ * and throws, preserving the throw-on-truncated contract.
  *
  * <p>NOTE: this class creates a split package with netty-buffer under the JPMS
  * module path; it is intended for classpath deployments.
