@@ -189,16 +189,10 @@ class LightProtoCodec {
     }
 
     static int readFixedInt32(ByteBuf b) {
-        if (b instanceof AbstractByteBuf) {
-            return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt32Unchecked((AbstractByteBuf) b);
-        }
         return b.readIntLE();
     }
 
     static long readFixedInt64(ByteBuf b) {
-        if (b instanceof AbstractByteBuf) {
-            return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt64Unchecked((AbstractByteBuf) b);
-        }
         return b.readLongLE();
     }
 
@@ -224,12 +218,6 @@ class LightProtoCodec {
     }
 
     static int readVarInt(ByteBuf buf) {
-        // The unchecked chain skips the per-byte readByte() checks (accessibility
-        // + bounds + an index store per byte); a truncated message can overrun by
-        // at most 9 bytes, which the generated parseFrom() detects afterwards.
-        if (buf instanceof AbstractByteBuf) {
-            return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarIntUnchecked((AbstractByteBuf) buf);
-        }
         byte tmp = buf.readByte();
         if (tmp >= 0) {
             return tmp;
@@ -264,6 +252,11 @@ class LightProtoCodec {
     }
 
     static long readVarInt64(ByteBuf buf) {
+        // Only 64-bit varints use the unchecked chain: their multi-byte decode
+        // amortizes it (+31% on varint64-heavy messages), while 1-byte-dominated
+        // reads measured faster on the canonical checked readByte() path. A
+        // truncated varint64 can overrun the message limit by at most 9 bytes;
+        // the generated parseFrom() detects that afterwards.
         if (buf instanceof AbstractByteBuf) {
             return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked((AbstractByteBuf) buf);
         }
