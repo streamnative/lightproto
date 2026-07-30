@@ -17,11 +17,14 @@ package io.netty.buffer;
 
 /**
  * Placed in the {@code io.netty.buffer} package to reach {@link AbstractByteBuf}'s
- * protected unchecked accessors ({@code _getByte} etc.) and its {@code readerIndex}
- * field directly. Callers validate readability once for the whole access, so the
- * per-byte {@code checkReadableBytes0()} / {@code ensureAccessible()} checks that
- * dominate parse profiles are skipped, and each varint performs a single
- * {@code readerIndex} store instead of one per byte.
+ * protected unchecked accessors ({@code _getByte}) and its {@code readerIndex}
+ * field directly. The per-byte {@code checkReadableBytes0()} /
+ * {@code ensureAccessible()} checks that dominate parse profiles are skipped, and
+ * each varint performs a single {@code readerIndex} store instead of one per byte.
+ *
+ * <p>Reads are not bounds-checked here: on truncated input a read may advance up
+ * to 10 bytes past the intended message limit. The generated {@code parseFrom()}
+ * detects that afterwards and throws, preserving the throw-on-truncated contract.
  *
  * <p>NOTE: this class creates a split package with netty-buffer under the JPMS
  * module path; it is intended for classpath deployments.
@@ -31,57 +34,8 @@ public final class LightProtoByteBufAccessTemplate {
     private LightProtoByteBufAccessTemplate() {
     }
 
-    /** Readable bytes via direct field access (no accessibility check). */
-    public static int readableBytesFast(AbstractByteBuf b) {
-        return b.writerIndex - b.readerIndex;
-    }
-
-    /**
-     * Read a varint of up to 10 bytes, discarding bits above 32.
-     * The caller must have verified at least 10 readable bytes.
-     */
-    public static int readVarIntUnchecked(AbstractByteBuf buf) {
-        int i = buf.readerIndex;
-        byte tmp = buf._getByte(i++);
-        if (tmp >= 0) {
-            buf.readerIndex = i;
-            return tmp;
-        }
-        int result = tmp & 0x7f;
-        if ((tmp = buf._getByte(i++)) >= 0) {
-            result |= tmp << 7;
-        } else {
-            result |= (tmp & 0x7f) << 7;
-            if ((tmp = buf._getByte(i++)) >= 0) {
-                result |= tmp << 14;
-            } else {
-                result |= (tmp & 0x7f) << 14;
-                if ((tmp = buf._getByte(i++)) >= 0) {
-                    result |= tmp << 21;
-                } else {
-                    result |= (tmp & 0x7f) << 21;
-                    result |= (tmp = buf._getByte(i++)) << 28;
-                    if (tmp < 0) {
-                        // Discard upper 32 bits.
-                        for (int j = 0; j < 5; j++) {
-                            if (buf._getByte(i++) >= 0) {
-                                buf.readerIndex = i;
-                                return result;
-                            }
-                        }
-                        buf.readerIndex = i;
-                        throw new IllegalArgumentException("Encountered a malformed varint.");
-                    }
-                }
-            }
-        }
-        buf.readerIndex = i;
-        return result;
-    }
-
     /**
      * Read a varint of up to 10 bytes as a long.
-     * The caller must have verified at least 10 readable bytes.
      *
      * <p>The 1-2 byte cases are decoded here so the method stays far below C2's
      * FreqInlineSize: the full nested chain compiles to ~371 bytecodes and is
@@ -156,21 +110,5 @@ public final class LightProtoByteBufAccessTemplate {
         }
         buf.readerIndex = i;
         return result;
-    }
-
-    /** Read a little-endian fixed 32-bit value; caller verified 4 readable bytes. */
-    public static int readFixedInt32Unchecked(AbstractByteBuf buf) {
-        int i = buf.readerIndex;
-        int v = buf._getIntLE(i);
-        buf.readerIndex = i + 4;
-        return v;
-    }
-
-    /** Read a little-endian fixed 64-bit value; caller verified 8 readable bytes. */
-    public static long readFixedInt64Unchecked(AbstractByteBuf buf) {
-        int i = buf.readerIndex;
-        long v = buf._getLongLE(i);
-        buf.readerIndex = i + 8;
-        return v;
     }
 }
