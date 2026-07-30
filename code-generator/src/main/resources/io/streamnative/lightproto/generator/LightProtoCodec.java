@@ -252,14 +252,20 @@ class LightProtoCodec {
     }
 
     static long readVarInt64(ByteBuf buf) {
-        // Only 64-bit varints use the unchecked chain: their multi-byte decode
-        // amortizes it (+31% on varint64-heavy messages), while 1-byte-dominated
-        // reads measured faster on the canonical checked readByte() path. A
+        // Only 64-bit varints use the unchecked path: it skips the per-byte
+        // bounds/accessibility checks (+31% on varint64-heavy messages). A
         // truncated varint64 can overrun the message limit by at most 9 bytes;
-        // the generated parseFrom() detects that afterwards.
+        // the generated parseFrom() detects that afterwards. The checked
+        // fallback lives in its own method so this one stays small enough to
+        // always inline (with the chain inline it is 303 bytecodes and C2
+        // refuses it at hot call sites).
         if (buf instanceof AbstractByteBuf) {
             return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked((AbstractByteBuf) buf);
         }
+        return readVarInt64Checked(buf);
+    }
+
+    private static long readVarInt64Checked(ByteBuf buf) {
         long result;
         byte tmp = buf.readByte();
         if (tmp >= 0) {

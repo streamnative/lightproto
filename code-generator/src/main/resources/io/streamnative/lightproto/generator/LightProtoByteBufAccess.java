@@ -82,8 +82,29 @@ public final class LightProtoByteBufAccessTemplate {
     /**
      * Read a varint of up to 10 bytes as a long.
      * The caller must have verified at least 10 readable bytes.
+     *
+     * <p>The 1-2 byte cases are decoded here so the method stays far below C2's
+     * FreqInlineSize: the full nested chain compiles to ~371 bytecodes and is
+     * never inlined, so routing short varints through it costs a call per read —
+     * a net loss on small values. Longer varints fall into the chain, whose
+     * multi-byte decode amortizes the call.
      */
     public static long readVarInt64Unchecked(AbstractByteBuf buf) {
+        int i = buf.readerIndex;
+        byte b0 = buf._getByte(i);
+        if (b0 >= 0) {
+            buf.readerIndex = i + 1;
+            return b0;
+        }
+        byte b1 = buf._getByte(i + 1);
+        if (b1 >= 0) {
+            buf.readerIndex = i + 2;
+            return (b0 & 0x7f) | ((long) b1 << 7);
+        }
+        return readVarInt64UncheckedChain(buf);
+    }
+
+    private static long readVarInt64UncheckedChain(AbstractByteBuf buf) {
         int i = buf.readerIndex;
         long result;
         byte tmp = buf._getByte(i++);

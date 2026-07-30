@@ -78,6 +78,19 @@ public abstract class LightProtoField {
         return field.isRequired();
     }
 
+    /**
+     * True when parsing this field invokes LightProtoCodec.readVarInt64(), the one
+     * reader that can advance past the message limit on truncated input. Messages
+     * with no such field skip the post-parse truncation check.
+     */
+    public boolean usesVarInt64Parse() {
+        return isVarInt64Type(field.getProtoType());
+    }
+
+    static boolean isVarInt64Type(String protoType) {
+        return "int64".equals(protoType) || "uint64".equals(protoType) || "sint64".equals(protoType);
+    }
+
     public void docs(PrintWriter w) {
         String doc = field.getDoc();
         if (doc != null && !doc.isEmpty()) {

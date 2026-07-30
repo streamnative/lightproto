@@ -173,12 +173,17 @@ public class LightProtoMessage {
         w.format("                    LightProtoCodec.skipUnknownField(_tag, _buffer);\n");
         w.format("                }\n");
         w.format("            }\n");
-        // A truncated field always consumes past the message limit (the unchecked
-        // readers don't stop at _endIdx), so one check restores the
-        // throw-on-truncated-input contract.
-        w.format("            if (_buffer.readerIndex() > _endIdx) {\n");
-        w.format("                throw new IndexOutOfBoundsException(\"Truncated protobuf message\");\n");
-        w.format("            }\n");
+        // A truncated varint64 is the one read that can consume past the message
+        // limit without throwing (every other reader is bounds-checked), so the
+        // check that restores the throw-on-truncated-input contract is emitted
+        // only for messages that parse 64-bit varints. Messages without them keep
+        // parseFrom() byte-identical to the fully checked version: even a dead
+        // extra check measurably perturbs code generation on small messages.
+        if (fields.stream().anyMatch(LightProtoField::usesVarInt64Parse)) {
+            w.format("            if (_buffer.readerIndex() > _endIdx) {\n");
+            w.format("                throw new IndexOutOfBoundsException(\"Truncated protobuf message\");\n");
+            w.format("            }\n");
+        }
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
