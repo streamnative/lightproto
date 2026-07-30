@@ -42,7 +42,6 @@ class LightProtoCodec {
     private static final MethodHandle MH_GET_OBJECT;
     private static final MethodHandle MH_PUT_OBJECT;
     private static final MethodHandle MH_COPY_MEMORY;
-    private static final MethodHandle MH_GET_LONG;
     private static final MethodHandle MH_ALLOCATE_INSTANCE;
 
     static {
@@ -53,7 +52,6 @@ class LightProtoCodec {
         MethodHandle mhGetObject = null;
         MethodHandle mhPutObject = null;
         MethodHandle mhCopyMemory = null;
-        MethodHandle mhGetLong = null;
         MethodHandle mhAllocateInstance = null;
         try {
             Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
@@ -82,8 +80,6 @@ class LightProtoCodec {
             mhCopyMemory = lookup.unreflect(
                     unsafeClass.getMethod("copyMemory", Object.class, long.class, Object.class, long.class, long.class))
                     .bindTo(unsafe);
-            mhGetLong = lookup.unreflect(
-                    unsafeClass.getMethod("getLong", Object.class, long.class)).bindTo(unsafe);
             mhAllocateInstance = lookup.unreflect(
                     unsafeClass.getMethod("allocateInstance", Class.class)).bindTo(unsafe);
             hasUnsafe = true;
@@ -97,7 +93,6 @@ class LightProtoCodec {
         MH_GET_OBJECT = mhGetObject;
         MH_PUT_OBJECT = mhPutObject;
         MH_COPY_MEMORY = mhCopyMemory;
-        MH_GET_LONG = mhGetLong;
         MH_ALLOCATE_INSTANCE = mhAllocateInstance;
     }
 
@@ -548,24 +543,26 @@ class LightProtoCodec {
         return b.toString(index, len, StandardCharsets.UTF_8);
     }
 
+    // Plain unfenced 8-byte loads. The former sun.misc.Unsafe.getLong version
+    // executed a JDK 24+ acquire-load per call (JEP 498), whose cost grows with
+    // the store traffic of whatever ran just before — measured as a large part
+    // of string-materialization time right after a parse.
+    private static final java.lang.invoke.VarHandle LONG_ARRAY_VIEW =
+            MethodHandles.byteArrayViewVarHandle(long[].class, java.nio.ByteOrder.nativeOrder());
+
     private static boolean _isAscii(byte[] bytes, int len) {
-        try {
-            // Check 8 bytes at a time using long reads — data is in L1 cache from the copy
-            int i = 0;
-            for (; i + 7 < len; i += 8) {
-                if (((long) MH_GET_LONG.invokeExact((Object) bytes, BYTE_ARRAY_BASE_OFFSET + i)
-                        & 0x8080808080808080L) != 0) {
-                    return false;
-                }
+        // Check 8 bytes at a time using long reads — data is in L1 cache from the copy
+        int i = 0;
+        for (; i + 7 < len; i += 8) {
+            if (((long) LONG_ARRAY_VIEW.get(bytes, i) & 0x8080808080808080L) != 0) {
+                return false;
             }
-            // Check remaining bytes
-            for (; i < len; i++) {
-                if (bytes[i] < 0) return false;
-            }
-            return true;
-        } catch (Throwable t) {
-            throw new RuntimeException(t);
         }
+        // Check remaining bytes
+        for (; i < len; i++) {
+            if (bytes[i] < 0) return false;
+        }
+        return true;
     }
 
     static void skipUnknownField(int tag, ByteBuf buffer) {
