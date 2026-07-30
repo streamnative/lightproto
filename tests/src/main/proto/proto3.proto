@@ -45,3 +45,9 @@ message Proto3Message {
     // Map
     map<string, int32> string_to_int = 16;
 }
+
+// Exercises the varint64 detection through map key/value types: the parser
+// must emit the post-parse truncation check for this message.
+message MapInt64Message {
+    map<string, int64> counters = 1;
+}

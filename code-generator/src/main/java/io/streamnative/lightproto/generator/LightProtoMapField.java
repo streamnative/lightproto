@@ -30,6 +30,11 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         this.valueField = field.getMapValueField();
     }
 
+    @Override
+    public boolean usesVarInt64Parse() {
+        return isVarInt64Type(keyField.getProtoType()) || isVarInt64Type(valueField.getProtoType());
+    }
+
     private boolean isStringKey() {
         return keyField.isStringField();
     }
