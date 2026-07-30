@@ -183,11 +183,68 @@ public class LightProtoMessage {
         w.format("        }\n");
     }
 
+    // Below this count of singular message fields, the plain per-field
+    // `if (hasX()) x.clear()` guards are cheaper than the set-bit loop.
+    private static final int BIT_DRIVEN_CLEAR_THRESHOLD = 4;
+
+    /**
+     * Non-oneof singular message fields: the only fields whose clear() emission is
+     * presence-bit-guarded. Union-like messages (e.g. Pulsar's BaseCommand) declare
+     * dozens of them but only ever set one or two, so clear() iterates the set bits
+     * instead of walking every guard.
+     */
+    private List<LightProtoField> bitGuardedMessageFields() {
+        List<LightProtoField> result = new ArrayList<>();
+        for (LightProtoField f : fields) {
+            if (f instanceof LightProtoMessageField && !f.isOneofMember()) {
+                result.add(f);
+            }
+        }
+        return result;
+    }
+
+    private boolean useBitDrivenClear() {
+        return bitGuardedMessageFields().size() >= BIT_DRIVEN_CLEAR_THRESHOLD;
+    }
+
     private void generateClear(PrintWriter w) {
         w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
         w.format("        public %s clear() {\n", message.getName());
+        boolean bitDriven = useBitDrivenClear();
         for (LightProtoField f : fields) {
+            if (bitDriven && f instanceof LightProtoMessageField && !f.isOneofMember()) {
+                continue; // handled by the set-bit loop below
+            }
             f.clear(w);
+        }
+
+        if (bitDriven) {
+            // Clear only the message fields that are actually present: iterate the
+            // set bits of each word restricted to message-field masks, instead of
+            // testing every field's has() guard sequentially.
+            List<LightProtoField> msgFields = bitGuardedMessageFields();
+            for (int word = 0; word < bitFieldsCount(); word++) {
+                final int wordIdx = word;
+                List<LightProtoField> inWord = msgFields.stream()
+                        .filter(f -> f.index() / 32 == wordIdx)
+                        .collect(Collectors.toList());
+                if (inWord.isEmpty()) {
+                    continue;
+                }
+                w.format("            int _mBits%d = _bitField%d & _MSG_FIELDS_MASK%d;\n", word, word, word);
+                w.format("            while (_mBits%d != 0) {\n", word);
+                w.format("                int _mIdx = Integer.numberOfTrailingZeros(_mBits%d);\n", word);
+                w.format("                _mBits%d &= _mBits%d - 1;\n", word, word);
+                w.format("                switch (_mIdx) {\n");
+                for (LightProtoField f : inWord) {
+                    w.format("                case %d:\n", f.index() % 32);
+                    // The presence bit implies the child was allocated
+                    w.format("                    %s.clear();\n", f.ccName);
+                    w.format("                    break;\n");
+                }
+                w.format("                }\n");
+                w.format("            }\n");
+            }
         }
 
         w.format("            _parsedBuffer = null;\n");
@@ -511,6 +568,15 @@ public class LightProtoMessage {
                 w.format("private static final int _PRESENCE_CMP_MASK%d = 0", i);
                 fields.forEach(f -> {
                     if (isExplicitPresence(f) && f.index() / 32 == idx) {
+                        w.format(" | %s", f.fieldMask());
+                    }
+                });
+                w.println(";");
+            }
+            if (useBitDrivenClear()) {
+                w.format("private static final int _MSG_FIELDS_MASK%d = 0", i);
+                bitGuardedMessageFields().forEach(f -> {
+                    if (f.index() / 32 == idx) {
                         w.format(" | %s", f.fieldMask());
                     }
                 });
