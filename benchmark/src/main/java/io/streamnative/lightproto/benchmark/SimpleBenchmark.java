@@ -97,10 +97,10 @@ public class SimpleBenchmark {
         p.setZ(3);
         frame.setName("xyz");
 
-        p.writeTo(buffer);
+        frame.writeTo(buffer);
         buffer.clear();
 
-        bh.consume(p);
+        bh.consume(frame);
     }
 
     @Benchmark
