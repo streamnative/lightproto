@@ -173,6 +173,12 @@ public class LightProtoMessage {
         w.format("                    LightProtoCodec.skipUnknownField(_tag, _buffer);\n");
         w.format("                }\n");
         w.format("            }\n");
+        // A truncated field always consumes past the message limit (the unchecked
+        // readers don't stop at _endIdx), so one check restores the
+        // throw-on-truncated-input contract.
+        w.format("            if (_buffer.readerIndex() > _endIdx) {\n");
+        w.format("                throw new IndexOutOfBoundsException(\"Truncated protobuf message\");\n");
+        w.format("            }\n");
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }

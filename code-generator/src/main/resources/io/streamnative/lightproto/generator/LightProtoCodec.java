@@ -190,20 +190,14 @@ class LightProtoCodec {
 
     static int readFixedInt32(ByteBuf b) {
         if (b instanceof AbstractByteBuf) {
-            AbstractByteBuf a = (AbstractByteBuf) b;
-            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 4) {
-                return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt32Unchecked(a);
-            }
+            return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt32Unchecked((AbstractByteBuf) b);
         }
         return b.readIntLE();
     }
 
     static long readFixedInt64(ByteBuf b) {
         if (b instanceof AbstractByteBuf) {
-            AbstractByteBuf a = (AbstractByteBuf) b;
-            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 8) {
-                return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt64Unchecked(a);
-            }
+            return io.netty.buffer.LightProtoByteBufAccessTemplate.readFixedInt64Unchecked((AbstractByteBuf) b);
         }
         return b.readLongLE();
     }
@@ -230,14 +224,11 @@ class LightProtoCodec {
     }
 
     static int readVarInt(ByteBuf buf) {
-        // With >= 10 readable bytes a varint cannot overrun the buffer, so the
-        // per-byte readByte() checks (accessibility + bounds + an index store per
-        // byte) can be skipped entirely via the unchecked accessors.
+        // The unchecked chain skips the per-byte readByte() checks (accessibility
+        // + bounds + an index store per byte); a truncated message can overrun by
+        // at most 9 bytes, which the generated parseFrom() detects afterwards.
         if (buf instanceof AbstractByteBuf) {
-            AbstractByteBuf a = (AbstractByteBuf) buf;
-            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 10) {
-                return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarIntUnchecked(a);
-            }
+            return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarIntUnchecked((AbstractByteBuf) buf);
         }
         byte tmp = buf.readByte();
         if (tmp >= 0) {
@@ -274,10 +265,7 @@ class LightProtoCodec {
 
     static long readVarInt64(ByteBuf buf) {
         if (buf instanceof AbstractByteBuf) {
-            AbstractByteBuf a = (AbstractByteBuf) buf;
-            if (io.netty.buffer.LightProtoByteBufAccessTemplate.readableBytesFast(a) >= 10) {
-                return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked(a);
-            }
+            return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked((AbstractByteBuf) buf);
         }
         long result;
         byte tmp = buf.readByte();
