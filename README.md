@@ -25,7 +25,7 @@ Add the Maven plugin to your `pom.xml`:
 <plugin>
     <groupId>io.streamnative.lightproto</groupId>
     <artifactId>lightproto-maven-plugin</artifactId>
-    <version>0.7.3</version>
+    <version>0.8.0</version>
     <executions>
         <execution>
             <goals>
@@ -45,7 +45,7 @@ Add the plugin to your `build.gradle`:
 
 ```groovy
 plugins {
-    id 'io.streamnative.lightproto' version '0.7.3'
+    id 'io.streamnative.lightproto' version '0.8.0'
 }
 ```
 
@@ -57,7 +57,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.7.3'
+        classpath 'io.streamnative.lightproto:lightproto-gradle-plugin:0.8.0'
     }
 }
 
@@ -273,18 +273,19 @@ client streaming, and bidirectional streaming.
 | Benchmark | Google Protobuf | LightProto | Speedup |
 |:---|---:|---:|---:|
 | **AddressBook** (nested messages, strings) | | | |
-| &emsp;Serialize | 6.4 | 22.6 | **3.5x** |
-| &emsp;Fill + Serialize | 2.2 | 12.8 | **5.9x** |
-| &emsp;Deserialize | 3.8 | 19.2 | **5.1x** |
-| **Simple** (small numeric messages) | | | |
-| &emsp;Serialize | 30.8 | 245.6 | **8.0x** |
-| &emsp;Deserialize | 20.0 | 100.9 | **5.0x** |
+| &emsp;Serialize | 6.5 | 24.7 | **3.8x** |
+| &emsp;Fill + Serialize | 2.3 | 15.1 | **6.6x** |
+| &emsp;Deserialize | 3.6 | 26.1 | **7.2x** |
+| **Simple** (tiny message: string + nested numerics) | | | |
+| &emsp;Serialize | 28.2 | 163.0 | **5.8x** |
+| &emsp;Deserialize | 16.1 | 82.5 | **5.1x** |
+| &emsp;Deserialize + read string | 16.1 | 50.7 | **3.2x** |
 | **Pulsar MessageMetadata** (strings, properties, batch fields) | | | |
-| &emsp;Serialize | 2.8 | 10.9 | **3.8x** |
-| &emsp;Deserialize | 4.2 | 14.1 | **3.4x** |
+| &emsp;Serialize | 2.9 | 13.9 | **4.8x** |
+| &emsp;Deserialize | 4.1 | 23.2 | **5.6x** |
 | **Pulsar BaseCommand+Send** (nested message, numerics) | | | |
-| &emsp;Serialize | 15.8 | 26.8 | **1.7x** |
-| &emsp;Deserialize | 12.8 | 40.3 | **3.2x** |
+| &emsp;Serialize | 16.0 | 41.3 | **2.6x** |
+| &emsp;Deserialize | 12.5 | 46.4 | **3.7x** |
 
 ### Speedup Chart
 
@@ -292,18 +293,19 @@ client streaming, and bidirectional streaming.
                         Speedup over Google Protobuf (x times faster)
                         1x    2x    3x    4x    5x    6x    7x    8x
                         |     |     |     |     |     |     |     |
-AddressBook Ser         |████████████████████                       3.5x
-AddressBook Fill+Ser    |██████████████████████████████████████████  5.9x
-AddressBook Deser       |█████████████████████████████████          5.1x
+AddressBook Ser         |███████████████████████                    3.8x
+AddressBook Fill+Ser    |████████████████████████████████████████   6.6x
+AddressBook Deser       |███████████████████████████████████████████ 7.2x
                         |     |     |     |     |     |     |     |
-Simple Ser              |█████████████████████████████████████████████████ 8.0x
-Simple Deser            |█████████████████████████████████          5.0x
+Simple Ser              |███████████████████████████████████        5.8x
+Simple Deser            |███████████████████████████████            5.1x
+Simple Deser+ReadStr    |███████████████████                        3.2x
                         |     |     |     |     |     |     |     |
-Pulsar MD Ser           |██████████████████████                     3.8x
-Pulsar MD Deser         |███████████████████                        3.4x
+Pulsar MD Ser           |█████████████████████████████              4.8x
+Pulsar MD Deser         |██████████████████████████████████         5.6x
                         |     |     |     |     |     |     |     |
-Pulsar Cmd Ser          |████████                                   1.7x
-Pulsar Cmd Deser        |█████████████████                          3.2x
+Pulsar Cmd Ser          |████████████████                           2.6x
+Pulsar Cmd Deser        |██████████████████████                     3.7x
                         |     |     |     |     |     |     |     |
 ```
 
@@ -316,31 +318,31 @@ Pulsar Cmd Deser        |█████████████████    
 Benchmark                                                    Mode  Cnt    Score    Error   Units
 
 -- AddressBook (nested messages with strings) --
-ProtoBenchmark.protobufSerialize                            thrpt    3    6.422 ±  0.242  ops/us
-ProtoBenchmark.protobufFillAndSerialize                     thrpt    3    2.190 ±  0.365  ops/us
-ProtoBenchmark.protobufDeserialize                          thrpt    3    3.777 ±  0.253  ops/us
-ProtoBenchmark.lightProtoSerialize                          thrpt    3   22.551 ±  0.355  ops/us
-ProtoBenchmark.lightProtoFillAndSerialize                   thrpt    3   12.827 ±  2.816  ops/us
-ProtoBenchmark.lightProtoDeserialize                        thrpt    3   19.166 ±  1.022  ops/us
+ProtoBenchmark.protobufSerialize                            thrpt    3    6.493 ±  0.164  ops/us
+ProtoBenchmark.protobufFillAndSerialize                     thrpt    3    2.289 ±  0.635  ops/us
+ProtoBenchmark.protobufDeserialize                          thrpt    3    3.634 ±  0.817  ops/us
+ProtoBenchmark.lightProtoSerialize                          thrpt    3   24.671 ±  1.839  ops/us
+ProtoBenchmark.lightProtoFillAndSerialize                   thrpt    3   15.052 ±  4.058  ops/us
+ProtoBenchmark.lightProtoDeserialize                        thrpt    3   26.062 ±  6.488  ops/us
 
--- Simple (small numeric messages) --
-SimpleBenchmark.protobufSerialize                           thrpt    3   30.768 ± 14.107  ops/us
-SimpleBenchmark.protobufDeserialize                         thrpt    3   19.988 ±  0.499  ops/us
-SimpleBenchmark.lightProtoSerialize                         thrpt    3  245.575 ± 87.004  ops/us
-SimpleBenchmark.lightProtoDeserialize                       thrpt    3  100.857 ±  2.221  ops/us
-SimpleBenchmark.lightProtoDeserializeReadString             thrpt    3   54.111 ± 14.056  ops/us
+-- Simple (tiny message: string + nested numerics) --
+SimpleBenchmark.protobufSerialize                           thrpt    3   28.187 ±  2.962  ops/us
+SimpleBenchmark.protobufDeserialize                         thrpt    3   16.055 ±  5.500  ops/us
+SimpleBenchmark.lightProtoSerialize                         thrpt    3  163.043 ±  1.449  ops/us
+SimpleBenchmark.lightProtoDeserialize                       thrpt    3   82.527 ± 57.963  ops/us
+SimpleBenchmark.lightProtoDeserializeReadString             thrpt    3   50.745 ± 11.938  ops/us
 
 -- Pulsar MessageMetadata (strings, repeated properties, batch fields) --
-PulsarApiBenchmark.protobufSerializeMessageMetadata         thrpt    3    2.838 ±  0.580  ops/us
-PulsarApiBenchmark.protobufDeserializeMessageMetadata       thrpt    3    4.176 ±  0.241  ops/us
-PulsarApiBenchmark.lightProtoSerializeMessageMetadata       thrpt    3   10.852 ±  0.677  ops/us
-PulsarApiBenchmark.lightProtoDeserializeMessageMetadata     thrpt    3   14.141 ±  8.862  ops/us
+PulsarApiBenchmark.protobufSerializeMessageMetadata         thrpt    3    2.883 ±  0.837  ops/us
+PulsarApiBenchmark.protobufDeserializeMessageMetadata       thrpt    3    4.134 ±  0.583  ops/us
+PulsarApiBenchmark.lightProtoSerializeMessageMetadata       thrpt    3   13.927 ±  6.783  ops/us
+PulsarApiBenchmark.lightProtoDeserializeMessageMetadata     thrpt    3   23.244 ±  0.452  ops/us
 
 -- Pulsar BaseCommand + CommandSend (nested message, mostly numerics) --
-PulsarApiBenchmark.protobufSerializeBaseCommand             thrpt    3   15.818 ±  4.591  ops/us
-PulsarApiBenchmark.protobufDeserializeBaseCommand           thrpt    3   12.771 ±  3.192  ops/us
-PulsarApiBenchmark.lightProtoSerializeBaseCommand           thrpt    3   26.814 ±  1.107  ops/us
-PulsarApiBenchmark.lightProtoDeserializeBaseCommand         thrpt    3   40.296 ±  2.816  ops/us
+PulsarApiBenchmark.protobufSerializeBaseCommand             thrpt    3   16.042 ±  3.728  ops/us
+PulsarApiBenchmark.protobufDeserializeBaseCommand           thrpt    3   12.531 ±  1.683  ops/us
+PulsarApiBenchmark.lightProtoSerializeBaseCommand           thrpt    3   41.282 ±  3.299  ops/us
+PulsarApiBenchmark.lightProtoDeserializeBaseCommand         thrpt    3   46.423 ± 13.136  ops/us
 ```
 
 </details>
