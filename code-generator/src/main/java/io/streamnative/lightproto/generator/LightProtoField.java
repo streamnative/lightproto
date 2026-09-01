@@ -140,6 +140,15 @@ public abstract class LightProtoField {
         clear(w);
     }
 
+    /**
+     * Whether this field retains data references that {@link #clearRelease(PrintWriter)}
+     * must drop. Messages where no field does skip the clear() size gate entirely:
+     * their release path is behaviorally identical to the plain clear.
+     */
+    public boolean needsRelease() {
+        return false;
+    }
+
     public void fieldClear(PrintWriter w, String enclosingType) {
         w.format("        /** Clear the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));

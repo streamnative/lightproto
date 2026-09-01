@@ -286,13 +286,18 @@ public class LightProtoMessage {
     private void generateClear(PrintWriter w) {
         w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
         w.format("        public %s clear() {\n", message.getName());
-        // _cachedSize is the previous message's size at this point (parseFrom()
-        // and getSerializedSize() maintain it), so the gate is O(1). -1 (mutated
-        // since, unknown fields on the wire, or already cleared) takes the
-        // release path conservatively — over cleared fields it walks nothing.
-        w.format("            if (_cachedSize > LightProtoCodec.CLEAR_RETAIN_MAX || _cachedSize < 0) {\n");
-        w.format("                return _clearAndRelease();\n");
-        w.format("            }\n");
+        // Only messages that can retain data references need the release gate;
+        // for the rest _clearAndRelease() is behaviorally identical to clear().
+        if (fields.stream().anyMatch(LightProtoField::needsRelease)) {
+            // _cachedSize is the previous message's size at this point (parseFrom()
+            // and getSerializedSize() maintain it), so the gate is O(1) — a single
+            // unsigned compare: -1 (mutated since, unknown fields on the wire, or
+            // already cleared) is huge unsigned, taking the release path
+            // conservatively; over cleared fields it walks nothing.
+            w.format("            if (Integer.compareUnsigned(_cachedSize, LightProtoCodec.CLEAR_RETAIN_MAX) > 0) {\n");
+            w.format("                return _clearAndRelease();\n");
+            w.format("            }\n");
+        }
         boolean bitDriven = useBitDrivenClear();
         for (LightProtoField f : fields) {
             if (bitDriven && f instanceof LightProtoMessageField && !f.isOneofMember()) {

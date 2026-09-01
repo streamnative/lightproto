@@ -121,6 +121,11 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public boolean needsRelease() {
+        return true;
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("if (%s()) {\n", Util.camelCase("has", ccName));
         w.format("    %s.materialize();\n", ccName);

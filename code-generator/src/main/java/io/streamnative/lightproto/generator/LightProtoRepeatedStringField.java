@@ -212,6 +212,11 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public boolean needsRelease() {
+        return true;
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);

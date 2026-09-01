@@ -193,6 +193,11 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public boolean needsRelease() {
+        return true;
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    %s[i].materialize();\n", pluralName);

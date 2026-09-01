@@ -997,6 +997,11 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public boolean needsRelease() {
+        return true;
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         if (isStringKey()) {
             w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
