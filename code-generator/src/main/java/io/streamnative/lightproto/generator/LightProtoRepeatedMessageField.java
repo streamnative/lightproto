@@ -73,12 +73,12 @@ public class LightProtoRepeatedMessageField extends LightProtoAbstractRepeated {
     }
 
     @Override
-    public void serialize(PrintWriter w) {
+    public void serialize(PrintWriter w, WriteSink sink) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-        w.format("    %s;\n", writeTagExpr(tagName()));
-        w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _item.getSerializedSize());\n");
-        w.format("    _i = _item._writeTo(_a, _i);\n");
+        w.format("    %s;\n", writeTagExpr(tagName(), sink));
+        w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _item.getSerializedSize());\n", sink.var);
+        w.format("    _i = _item._writeTo(%s, _i);\n", sink.var);
         w.format("}\n");
     }
 

@@ -173,7 +173,37 @@ public abstract class LightProtoField {
 
     abstract public void serializedSize(PrintWriter w);
 
-    abstract public void serialize(PrintWriter w);
+    /**
+     * Where generated serialization code writes. Both sinks are addressed by the int
+     * cursor {@code _i}, and every LightProtoCodec raw writer is overloaded for both,
+     * so a field emitter differs between them only in the sink variable and in how
+     * bulk data is copied out of a ByteBuf.
+     */
+    enum WriteSink {
+        /** {@code byte[] _a}: a heap buffer's backing array, or the scratch array. */
+        ARRAY("_a"),
+        /** {@code java.nio.ByteBuffer _nb}: a direct buffer's NIO view, written in place. */
+        NIO("_nb");
+
+        final String var;
+
+        WriteSink(String var) {
+            this.var = var;
+        }
+
+        /** Emits a copy of {@code len} bytes of ByteBuf {@code src} from {@code srcIdx} to the cursor, advancing it. */
+        void copyBytes(PrintWriter w, String src, String srcIdx, String len) {
+            if (this == ARRAY) {
+                w.format("%s.getBytes(%s, _a, _i, %s);\n", src, srcIdx, len);
+                w.format("_i += %s;\n", len);
+            } else {
+                w.format("_i = LightProtoCodec.copyRawBytes(%s, %s, _nb, _i, %s);\n", src, srcIdx, len);
+            }
+        }
+    }
+
+    /** Emit this field's serialization into the given sink; must produce identical bytes for both sinks. */
+    abstract public void serialize(PrintWriter w, WriteSink sink);
 
     abstract public void serializeJson(PrintWriter w);
 
@@ -232,11 +262,11 @@ public abstract class LightProtoField {
 
     abstract protected String typeTag();
 
-    protected String writeTagExpr(String tag) {
+    protected String writeTagExpr(String tag, WriteSink sink) {
         if (field.getNumber() <= 15) {
-            return String.format("_i = LightProtoCodec.writeRawByte(_a, _i, %s)", tag);
+            return String.format("_i = LightProtoCodec.writeRawByte(%s, _i, %s)", sink.var, tag);
         } else {
-            return String.format("_i = LightProtoCodec.writeRawVarInt(_a, _i, %s)", tag);
+            return String.format("_i = LightProtoCodec.writeRawVarInt(%s, _i, %s)", sink.var, tag);
         }
     }
 

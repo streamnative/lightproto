@@ -81,29 +81,29 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     }
 
     @Override
-    public void serialize(PrintWriter w) {
+    public void serialize(PrintWriter w, WriteSink sink) {
         int fixedSize = LightProtoNumberField.fixedDataSize(field);
         if (field.isPacked()) {
-            w.format("    %s;\n", writeTagExpr(tagName() + "_PACKED"));
+            w.format("    %s;\n", writeTagExpr(tagName() + "_PACKED", sink));
             if (fixedSize >= 0) {
-                w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _%sCount * %d);\n", pluralName, fixedSize);
+                w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sCount * %d);\n", sink.var, pluralName, fixedSize);
             } else {
                 w.format("    int _%sSize = 0;\n", pluralName);
                 w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
                 w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
                 w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
                 w.format("}\n");
-                w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _%sSize);\n", pluralName);
+                w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sSize);\n", sink.var, pluralName);
             }
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
             w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            LightProtoNumberField.serializeNumber(w, field, "_item");
+            LightProtoNumberField.serializeNumber(w, field, "_item", sink);
             w.format("}\n");
         } else {
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
             w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-            w.format("    %s;\n", writeTagExpr(tagName()));
-            LightProtoNumberField.serializeNumber(w, field, "_item");
+            w.format("    %s;\n", writeTagExpr(tagName(), sink));
+            LightProtoNumberField.serializeNumber(w, field, "_item", sink);
             w.format("}\n");
         }
     }

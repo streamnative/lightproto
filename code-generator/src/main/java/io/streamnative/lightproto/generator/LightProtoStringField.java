@@ -101,14 +101,13 @@ public class LightProtoStringField extends LightProtoField {
     }
 
     @Override
-    public void serialize(PrintWriter w) {
-        w.format("%s;\n", writeTagExpr(tagName()));
-        w.format("_i = LightProtoCodec.writeRawVarInt(_a, _i, _%sBufferLen);\n", ccName);
+    public void serialize(PrintWriter w, WriteSink sink) {
+        w.format("%s;\n", writeTagExpr(tagName(), sink));
+        w.format("_i = LightProtoCodec.writeRawVarInt(%s, _i, _%sBufferLen);\n", sink.var, ccName);
         w.format("if (_%sBufferIdx == -1) {\n", ccName);
-        w.format("    _i = LightProtoCodec.writeRawString(_a, _i, %s, _%sBufferLen);\n", ccName, ccName);
+        w.format("    _i = LightProtoCodec.writeRawString(%s, _i, %s, _%sBufferLen);\n", sink.var, ccName, ccName);
         w.format("} else {\n");
-        w.format("    _parsedBuffer.getBytes(_%sBufferIdx, _a, _i, _%sBufferLen);\n", ccName, ccName);
-        w.format("    _i += _%sBufferLen;\n", ccName);
+        sink.copyBytes(w, "_parsedBuffer", "_" + ccName + "BufferIdx", "_" + ccName + "BufferLen");
         w.format("}\n");
     }
 

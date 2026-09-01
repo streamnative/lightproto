@@ -46,38 +46,35 @@ public class LightProtoNumberField extends LightProtoField {
         super(field, index);
     }
 
-    static void serializeNumber(PrintWriter w, ProtoFieldDescriptor field, String name) {
+    static void serializeNumber(PrintWriter w, ProtoFieldDescriptor field, String name, WriteSink sink) {
+        String writer;
+        String value = name;
         if (field.isEnumField()) {
-            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s.getValue());\n", name);
+            writer = "writeRawVarInt";
+            value = name + ".getValue()";
         } else if (field.getProtoType().equals("bool")) {
-            w.format("                _i = LightProtoCodec.writeRawByte(_a, _i, %s ? 1 : 0);\n", name);
-        } else if (field.getProtoType().equals("int32")) {
-            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("uint32")) {
-            w.format("                _i = LightProtoCodec.writeRawVarInt(_a, _i, %s);\n", name);
+            writer = "writeRawByte";
+            value = name + " ? 1 : 0";
+        } else if (field.getProtoType().equals("int32") || field.getProtoType().equals("uint32")) {
+            writer = "writeRawVarInt";
         } else if (field.getProtoType().equals("sint32")) {
-            w.format("                _i = LightProtoCodec.writeRawSignedVarInt(_a, _i, %s);\n", name);
+            writer = "writeRawSignedVarInt";
         } else if (field.getProtoType().equals("sint64")) {
-            w.format("                _i = LightProtoCodec.writeRawSignedVarInt64(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("int64")) {
-            w.format("                _i = LightProtoCodec.writeRawVarInt64(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("uint64")) {
-            w.format("                _i = LightProtoCodec.writeRawVarInt64(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("fixed32")) {
-            w.format("                _i = LightProtoCodec.writeRawLittleEndian32(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("fixed64")) {
-            w.format("                _i = LightProtoCodec.writeRawLittleEndian64(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("sfixed32")) {
-            w.format("                _i = LightProtoCodec.writeRawLittleEndian32(_a, _i, %s);\n", name);
-        } else if (field.getProtoType().equals("sfixed64")) {
-            w.format("                _i = LightProtoCodec.writeRawLittleEndian64(_a, _i, %s);\n", name);
+            writer = "writeRawSignedVarInt64";
+        } else if (field.getProtoType().equals("int64") || field.getProtoType().equals("uint64")) {
+            writer = "writeRawVarInt64";
+        } else if (field.getProtoType().equals("fixed32") || field.getProtoType().equals("sfixed32")) {
+            writer = "writeRawLittleEndian32";
+        } else if (field.getProtoType().equals("fixed64") || field.getProtoType().equals("sfixed64")) {
+            writer = "writeRawLittleEndian64";
         } else if (field.getProtoType().equals("double")) {
-            w.format("                _i = LightProtoCodec.writeRawDouble(_a, _i, %s);\n", name);
+            writer = "writeRawDouble";
         } else if (field.getProtoType().equals("float")) {
-            w.format("                _i = LightProtoCodec.writeRawFloat(_a, _i, %s);\n", name);
+            writer = "writeRawFloat";
         } else {
             throw new IllegalArgumentException("Failed to write serializer for field: " + field.getProtoType());
         }
+        w.format("                _i = LightProtoCodec.%s(%s, _i, %s);\n", writer, sink.var, value);
     }
 
     static String parseNumber(ProtoFieldDescriptor field) {
@@ -188,9 +185,9 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     @Override
-    public void serialize(PrintWriter w) {
-        w.format("%s;\n", writeTagExpr(tagName()));
-        serializeNumber(w, field, ccName);
+    public void serialize(PrintWriter w, WriteSink sink) {
+        w.format("%s;\n", writeTagExpr(tagName(), sink));
+        serializeNumber(w, field, ccName, sink);
     }
 
     @Override

@@ -416,12 +416,23 @@ public class LightProtoMessage {
         w.format("                int _writeIdx = _b.writerIndex();\n");
         w.format("                _writeTo(_b.array(), _b.arrayOffset() + _writeIdx);\n");
         w.format("                _b.writerIndex(_writeIdx + _serializedSize);\n");
+        w.format("            } else if (_serializedSize > LightProtoCodec.NIO_WRITE_MIN && _b.nioBufferCount() == 1) {\n");
+        // Single-region direct buffers are written in place through their NIO
+        // view: absolute puts on a DirectByteBuffer compile to a bounds check plus
+        // a jdk.internal.misc.Unsafe store (no JDK 24+ deprecation check), so no
+        // scratch array and no bulk copy are needed. Below NIO_WRITE_MIN the
+        // per-put cost outweighs the copy it saves, so small messages stay on the
+        // scratch path.
+        w.format("                _b.ensureWritable(_serializedSize);\n");
+        w.format("                int _writeIdx = _b.writerIndex();\n");
+        w.format("                java.nio.ByteBuffer _nb = _b.internalNioBuffer(_writeIdx, _serializedSize);\n");
+        w.format("                _writeTo(_nb, _nb.position());\n");
+        w.format("                _b.writerIndex(_writeIdx + _serializedSize);\n");
         w.format("            } else {\n");
-        // Direct, composite and other buffers: compose in a scratch array cached
-        // on this (typically pooled) instance and transfer with a single bulk
-        // write. Plain byte[] stores compile to raw memory accesses on every JDK,
-        // unlike sun.misc.Unsafe accesses which carry a per-call deprecation
-        // check since JDK 24.
+        // Small messages, and buffers without a single NIO region (composites):
+        // compose in a scratch array cached on this (typically pooled) instance
+        // and transfer with a single bulk write. Plain byte[] stores compile to
+        // raw memory accesses on every JDK.
         w.format("                byte[] _s = LightProtoCodec.scratchFor(this._scratch, _serializedSize);\n");
         w.format("                if (_s.length <= LightProtoCodec.SCRATCH_RETAIN_MAX) {\n");
         w.format("                    this._scratch = _s;\n");
@@ -439,6 +450,24 @@ public class LightProtoMessage {
         w.println("         * type into the same array.");
         w.println("         */");
         w.format("        public int _writeTo(byte[] _a, int _i) {\n");
+        emitWriteBody(w, LightProtoField.WriteSink.ARRAY);
+        w.format("            return _i;\n");
+        w.format("        }\n");
+
+        w.println("        /**");
+        w.println("         * Internal: serialize this message into a direct buffer's NIO view starting");
+        w.println("         * at absolute index {@code _i}; returns the index after the last byte written.");
+        w.println("         * Public only so that generated messages in other packages can serialize");
+        w.println("         * nested fields of this type into the same view.");
+        w.println("         */");
+        w.format("        public int _writeTo(java.nio.ByteBuffer _nb, int _i) {\n");
+        emitWriteBody(w, LightProtoField.WriteSink.NIO);
+        w.format("            return _i;\n");
+        w.format("        }\n");
+    }
+
+    /** The field walk shared by both write sinks; only the sink variable and bulk copies differ. */
+    private void emitWriteBody(PrintWriter w, LightProtoField.WriteSink sink) {
         if (hasRequiredFields()) {
             w.format("            checkRequiredFields();\n");
         }
@@ -447,22 +476,19 @@ public class LightProtoMessage {
             // guard: set bits ascend, so the output order (and bytes) match the
             // declaration-order guard walk. Required fields always have their bit
             // set here — checkRequiredFields() has already thrown otherwise.
-            emitBitDrivenTraversal(w, f -> f.serialize(w));
+            emitBitDrivenTraversal(w, f -> f.serialize(w, sink));
         } else {
             for (LightProtoField f : fields) {
                 String condition = f.serializeCondition();
                 if (condition != null) {
                     w.format("            if (%s) {\n", condition);
-                    f.serialize(w);
+                    f.serialize(w, sink);
                     w.format("            }\n");
                 } else {
-                    f.serialize(w);
+                    f.serialize(w, sink);
                 }
             }
         }
-
-        w.format("            return _i;\n");
-        w.format("        }\n");
     }
 
     private void generateGetSerializedSize(PrintWriter w) {

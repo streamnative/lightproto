@@ -390,16 +390,29 @@ class LightProtoCodec {
         }
     }
 
-    // --- Array-based raw write methods for zero-overhead serialization ---
-    // Serialization composes into a plain byte[] with an int cursor: heap buffers
-    // are written in place through their backing array, other buffer types are
-    // composed in a reusable scratch array and transferred with a single bulk
-    // writeBytes(). Plain array stores compile to raw memory accesses on every JDK
-    // (no sun.misc.Unsafe in the hot loop — its memory-access methods carry a
-    // per-call deprecation check since JDK 24).
+    // --- Raw write methods for zero-overhead serialization ---
+    // Serialization writes through an int cursor into one of two sinks, and every
+    // raw writer below is overloaded for both:
+    //  - a plain byte[]: heap buffers in place through their backing array; small
+    //    messages (and buffers without a single NIO region) composed in a reusable
+    //    scratch array and transferred with one bulk writeBytes();
+    //  - a direct buffer's NIO view (ByteBuf.internalNioBuffer) for messages above
+    //    NIO_WRITE_MIN, written in place: no scratch array and no bulk copy.
+    // Neither uses sun.misc.Unsafe in the hot loop (its memory-access methods carry
+    // a per-call deprecation check since JDK 24): array stores compile to raw
+    // memory accesses, and DirectByteBuffer puts to a bounds check plus a
+    // jdk.internal.misc.Unsafe store.
 
-    // Scratch arrays larger than this are not retained on the message instance,
-    // so outlier messages don't pin large allocations.
+    // Messages strictly larger than this are written through the NIO view when the
+    // target is a single-region direct buffer. Below it the view's per-put cost
+    // outweighs the scratch copy it saves (~+15% on a 70-byte varint-dense message,
+    // versus -20% at 600 bytes and -35% from 6 KB up).
+    static final int NIO_WRITE_MIN = 512;
+
+    // Scratch arrays larger than this are not retained on the message instance, so
+    // outlier messages don't pin large allocations. Direct-buffer messages above
+    // NIO_WRITE_MIN never touch the scratch, so it only grows past that for
+    // buffers without a single NIO region.
     static final int SCRATCH_RETAIN_MAX = 1024 * 1024;
 
     // clear() of a message larger than this (or of unknown size) releases the
@@ -509,6 +522,97 @@ class LightProtoCodec {
             System.arraycopy(s.getBytes(StandardCharsets.UTF_8), 0, a, i, bytesCount);
         }
         return i + bytesCount;
+    }
+
+    // NIO-view overloads of the writers above. Absolute puts ignore the view's
+    // position; the view's byte order is honored explicitly for fixed-width values.
+
+    static int writeRawByte(java.nio.ByteBuffer nb, int i, int value) {
+        nb.put(i, (byte) value);
+        return i + 1;
+    }
+
+    static int writeRawVarInt(java.nio.ByteBuffer nb, int i, int n) {
+        if (n >= 0) {
+            while (true) {
+                if ((n & ~0x7F) == 0) {
+                    nb.put(i++, (byte) n);
+                    return i;
+                }
+                nb.put(i++, (byte) ((n & 0x7F) | 0x80));
+                n >>>= 7;
+            }
+        } else {
+            return writeRawVarInt64(nb, i, n);
+        }
+    }
+
+    static int writeRawVarInt64(java.nio.ByteBuffer nb, int i, long value) {
+        while (true) {
+            if ((value & ~0x7FL) == 0) {
+                nb.put(i++, (byte) value);
+                return i;
+            }
+            nb.put(i++, (byte) (((int) value & 0x7F) | 0x80));
+            value >>>= 7;
+        }
+    }
+
+    static int writeRawSignedVarInt(java.nio.ByteBuffer nb, int i, int n) {
+        return writeRawVarInt(nb, i, encodeZigZag32(n));
+    }
+
+    static int writeRawSignedVarInt64(java.nio.ByteBuffer nb, int i, long n) {
+        return writeRawVarInt64(nb, i, encodeZigZag64(n));
+    }
+
+    static int writeRawLittleEndian32(java.nio.ByteBuffer nb, int i, int value) {
+        nb.putInt(i, nb.order() == java.nio.ByteOrder.LITTLE_ENDIAN ? value : Integer.reverseBytes(value));
+        return i + 4;
+    }
+
+    static int writeRawLittleEndian64(java.nio.ByteBuffer nb, int i, long value) {
+        nb.putLong(i, nb.order() == java.nio.ByteOrder.LITTLE_ENDIAN ? value : Long.reverseBytes(value));
+        return i + 8;
+    }
+
+    static int writeRawFloat(java.nio.ByteBuffer nb, int i, float n) {
+        return writeRawLittleEndian32(nb, i, Float.floatToRawIntBits(n));
+    }
+
+    static int writeRawDouble(java.nio.ByteBuffer nb, int i, double n) {
+        return writeRawLittleEndian64(nb, i, Double.doubleToRawLongBits(n));
+    }
+
+    static int writeRawString(java.nio.ByteBuffer nb, int i, String s, int bytesCount) {
+        if (s.length() == bytesCount) {
+            // ASCII fast path: bulk-put the String's internal LATIN1 byte[] directly
+            if (HAS_UNSAFE && COMPACT_STRINGS) {
+                try {
+                    Object _v = (Object) MH_GET_OBJECT.invokeExact((Object) s, STRING_VALUE_OFFSET);
+                    nb.put(i, (byte[]) _v, 0, bytesCount);
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
+            } else {
+                nb.put(i, s.getBytes(StandardCharsets.ISO_8859_1), 0, bytesCount);
+            }
+        } else {
+            nb.put(i, s.getBytes(StandardCharsets.UTF_8), 0, bytesCount);
+        }
+        return i + bytesCount;
+    }
+
+    /**
+     * Copies len bytes of src starting at srcIdx into the view at absolute index i
+     * (through a temporary position/limit window, restored afterwards); returns i + len.
+     */
+    static int copyRawBytes(ByteBuf src, int srcIdx, java.nio.ByteBuffer nb, int i, int len) {
+        int lim = nb.limit();
+        nb.limit(i + len).position(i);
+        src.getBytes(srcIdx, nb);
+        nb.limit(lim);
+        return i + len;
     }
 
     static String readString(ByteBuf b, int index, int len) {

@@ -83,17 +83,16 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     }
 
     @Override
-    public void serialize(PrintWriter w) {
+    public void serialize(PrintWriter w, WriteSink sink) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
-        w.format("    %s;\n", writeTagExpr(tagName()));
-        w.format("    _i = LightProtoCodec.writeRawVarInt(_a, _i, _bh.len);\n");
+        w.format("    %s;\n", writeTagExpr(tagName(), sink));
+        w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _bh.len);\n", sink.var);
         w.format("    if (_bh.idx == -1) {\n");
-        w.format("        _bh.b.getBytes(_bh.b.readerIndex(), _a, _i, _bh.len);\n");
+        sink.copyBytes(w, "_bh.b", "_bh.b.readerIndex()", "_bh.len");
         w.format("    } else {\n");
-        w.format("        _parsedBuffer.getBytes(_bh.idx, _a, _i, _bh.len);\n");
+        sink.copyBytes(w, "_parsedBuffer", "_bh.idx", "_bh.len");
         w.format("    }\n");
-        w.format("    _i += _bh.len;\n");
         w.format("}\n");
     }
 
