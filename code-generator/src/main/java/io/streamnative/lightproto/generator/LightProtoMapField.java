@@ -972,6 +972,31 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void clearRelease(PrintWriter w) {
+        if (isStringKey()) {
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", ccName);
+            w.format("    _%sKeys[i].s = null;\n", ccName);
+            w.format("}\n");
+        }
+        if (isStringValue()) {
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", ccName);
+            w.format("    _%sValues[i].s = null;\n", ccName);
+            w.format("}\n");
+        } else if (isBytesValue()) {
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", ccName);
+            w.format("    _%sValues[i].b = null;\n", ccName);
+            w.format("}\n");
+        } else if (isMessageValue()) {
+            // Forced recursion — see LightProtoMessageField#clearRelease.
+            w.format("for (int i = 0; i < _%sCount; i++) {\n", ccName);
+            w.format("    _%sValues[i]._clearAndRelease();\n", ccName);
+            w.format("}\n");
+        }
+        w.format("_%sCount = 0;\n", ccName);
+        w.format("_%sIndex = null;\n", ccName);
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         if (isStringKey()) {
             w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);

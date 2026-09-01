@@ -96,6 +96,7 @@ public class LightProtoMessage {
         generateParseFrom(w);
         generateCheckRequiredFields(w);
         generateClear(w);
+        generateClearAndRelease(w);
         generateCopyFrom(w);
 
         if (generateJson) {
@@ -285,6 +286,13 @@ public class LightProtoMessage {
     private void generateClear(PrintWriter w) {
         w.println("        /** Reset all fields to their default values, allowing this instance to be reused. */");
         w.format("        public %s clear() {\n", message.getName());
+        // _cachedSize is the previous message's size at this point (parseFrom()
+        // and getSerializedSize() maintain it), so the gate is O(1). -1 (mutated
+        // since, unknown fields on the wire, or already cleared) takes the
+        // release path conservatively — over cleared fields it walks nothing.
+        w.format("            if (_cachedSize > LightProtoCodec.CLEAR_RETAIN_MAX || _cachedSize < 0) {\n");
+        w.format("                return _clearAndRelease();\n");
+        w.format("            }\n");
         boolean bitDriven = useBitDrivenClear();
         for (LightProtoField f : fields) {
             if (bitDriven && f instanceof LightProtoMessageField && !f.isOneofMember()) {
@@ -331,6 +339,33 @@ public class LightProtoMessage {
             w.format("            _%sCase = 0;\n", Util.camelCase(oneof.getName()));
         }
 
+        w.format("            return this;\n");
+        w.format("        }\n");
+    }
+
+    private void generateClearAndRelease(PrintWriter w) {
+        w.println("        /**");
+        w.println("         * clear() variant for messages above CLEAR_RETAIN_MAX (or of unknown");
+        w.println("         * size) that also releases the data references the O(1) clear() leaves");
+        w.println("         * in place, so a reused (pooled or per-connection) instance doesn't pin");
+        w.println("         * the last message's data. Recursion into nested messages is forced —");
+        w.println("         * children don't re-check the size gate, or a large message spread over");
+        w.println("         * many small children would release nothing. Public only so that");
+        w.println("         * generated messages in other packages can release nested fields of");
+        w.println("         * this type.");
+        w.println("         */");
+        w.format("        public %s _clearAndRelease() {\n", message.getName());
+        for (LightProtoField f : fields) {
+            f.clearRelease(w);
+        }
+        w.format("            _parsedBuffer = null;\n");
+        w.format("            _cachedSize = -1;\n");
+        for (int i = 0; i < bitFieldsCount(); i++) {
+            w.format("            _bitField%d = 0;\n", i);
+        }
+        for (ProtoOneofDescriptor oneof : oneofs) {
+            w.format("            _%sCase = 0;\n", Util.camelCase(oneof.getName()));
+        }
         w.format("            return this;\n");
         w.format("        }\n");
     }

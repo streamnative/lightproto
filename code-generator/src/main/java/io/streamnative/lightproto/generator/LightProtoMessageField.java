@@ -112,6 +112,15 @@ public class LightProtoMessageField extends LightProtoField {
     }
 
     @Override
+    public void clearRelease(PrintWriter w) {
+        // Forced recursion: the child must not re-check its own size gate, or a
+        // large parent spread across many small children would release nothing.
+        w.format("if (%s()){\n", Util.camelCase("has", ccName));
+        w.format("    %s._clearAndRelease();\n", ccName);
+        w.format("}\n");
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("if (%s()) {\n", Util.camelCase("has", ccName));
         w.format("    %s.materialize();\n", ccName);

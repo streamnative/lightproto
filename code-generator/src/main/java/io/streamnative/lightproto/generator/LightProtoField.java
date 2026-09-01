@@ -129,6 +129,17 @@ public abstract class LightProtoField {
 
     abstract public void clear(PrintWriter w);
 
+    /**
+     * Emit this field's contribution to the generated {@code _clearAndRelease()}:
+     * like {@link #clear(PrintWriter)} but also releasing retained data references
+     * (cached Strings, ByteBuf refs), recursing into nested messages via their
+     * {@code _clearAndRelease()}. Fields that retain no references inherit this
+     * default, which emits the plain clear code.
+     */
+    public void clearRelease(PrintWriter w) {
+        clear(w);
+    }
+
     public void fieldClear(PrintWriter w, String enclosingType) {
         w.format("        /** Clear the {@code %s} field. */\n", field.getName());
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));

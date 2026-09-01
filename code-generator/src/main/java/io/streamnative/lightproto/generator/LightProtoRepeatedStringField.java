@@ -204,6 +204,14 @@ public class LightProtoRepeatedStringField extends LightProtoAbstractRepeated {
     }
 
     @Override
+    public void clearRelease(PrintWriter w) {
+        w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    %s[i].s = null;\n", pluralName);
+        w.format("}\n");
+        w.format("_%sCount = 0;\n", pluralName);
+    }
+
+    @Override
     public void materialize(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.StringHolder _sh = %s[i];\n", pluralName);

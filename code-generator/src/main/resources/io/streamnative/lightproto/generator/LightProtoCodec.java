@@ -402,6 +402,13 @@ class LightProtoCodec {
     // so outlier messages don't pin large allocations.
     static final int SCRATCH_RETAIN_MAX = 1024 * 1024;
 
+    // clear() of a message larger than this (or of unknown size) releases the
+    // data references retained by the O(1) clear design, so a reused (pooled or
+    // per-connection) instance pins at most this much of the last message's
+    // data. The release walk costs O(element count), which is noise for any
+    // message this large; below the threshold the walk is skipped entirely.
+    static final int CLEAR_RETAIN_MAX = 64 * 1024;
+
     /** Returns current if it can hold size bytes, otherwise a larger replacement. */
     static byte[] scratchFor(byte[] current, int size) {
         if (current != null && current.length >= size) {
