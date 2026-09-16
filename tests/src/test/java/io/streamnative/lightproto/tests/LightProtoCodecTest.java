@@ -18,7 +18,10 @@ package io.streamnative.lightproto.tests;
 import com.google.protobuf.CodedInputStream;
 import com.google.protobuf.CodedOutputStream;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
+import io.netty.util.ResourceLeakDetector;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -39,6 +42,31 @@ public class LightProtoCodecTest {
     public void setup() {
         bb.clear();
         Arrays.fill(b, (byte) 0);
+    }
+
+    @ParameterizedTest
+    @ValueSource(longs = {0, 9, 128, 16384, Long.MAX_VALUE, Long.MIN_VALUE, -1})
+    public void testVarInt64LeakAwareComposite(long value) {
+        ResourceLeakDetector.Level previousLevel = ResourceLeakDetector.getLevel();
+        ResourceLeakDetector.setLevel(ResourceLeakDetector.Level.PARANOID);
+        try {
+            CompositeByteBuf buffer = PooledByteBufAllocator.DEFAULT.compositeBuffer();
+            try {
+                ByteBuf prefix = PooledByteBufAllocator.DEFAULT.buffer(6).writeZero(6);
+                ByteBuf encoded = PooledByteBufAllocator.DEFAULT.buffer(10);
+                LightProtoCodec.writeVarInt64(encoded, value);
+                buffer.addComponents(true, prefix, encoded);
+                buffer.readerIndex(6);
+                assertEquals("io.netty.buffer.AdvancedLeakAwareCompositeByteBuf", buffer.getClass().getName());
+                int endIndex = buffer.writerIndex();
+                assertEquals(value, LightProtoCodec.readVarInt64(buffer));
+                assertEquals(endIndex, buffer.readerIndex());
+            } finally {
+                buffer.release();
+            }
+        } finally {
+            ResourceLeakDetector.setLevel(previousLevel);
+        }
     }
 
     @ParameterizedTest

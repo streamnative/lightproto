@@ -27,6 +27,7 @@ import java.nio.charset.StandardCharsets;
 
 class LightProtoCodec {
 
+    private static final Class<?> WRAPPED_COMPOSITE_BYTEBUF_CLASS = loadWrappedCompositeByteBufClass();
     private static final boolean HAS_UNSAFE;
     private static final long STRING_VALUE_OFFSET;
     static final long BYTE_ARRAY_BASE_OFFSET;
@@ -94,6 +95,16 @@ class LightProtoCodec {
         MH_PUT_OBJECT = mhPutObject;
         MH_COPY_MEMORY = mhCopyMemory;
         MH_ALLOCATE_INSTANCE = mhAllocateInstance;
+    }
+
+    private static Class<?> loadWrappedCompositeByteBufClass() {
+        try {
+            // This Netty class is package-private, so it cannot be referenced directly.
+            return Class.forName("io.netty.buffer.WrappedCompositeByteBuf", false, ByteBuf.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            // Use checked reads if the wrapper hierarchy cannot be identified.
+            return null;
+        }
     }
 
     static final int TAG_TYPE_MASK = 7;
@@ -254,7 +265,10 @@ class LightProtoCodec {
         // fallback lives in its own method so this one stays small enough to
         // always inline (with the chain inline it is 303 bytecodes and C2
         // refuses it at hot call sites).
-        if (buf instanceof AbstractByteBuf) {
+        // Composite wrappers delegate their indices to another buffer. The inherited
+        // readerIndex field used by the unchecked accessor is not authoritative.
+        if (buf instanceof AbstractByteBuf && WRAPPED_COMPOSITE_BYTEBUF_CLASS != null
+                && !WRAPPED_COMPOSITE_BYTEBUF_CLASS.isInstance(buf)) {
             return io.netty.buffer.LightProtoByteBufAccessTemplate.readVarInt64Unchecked((AbstractByteBuf) buf);
         }
         return readVarInt64Checked(buf);
