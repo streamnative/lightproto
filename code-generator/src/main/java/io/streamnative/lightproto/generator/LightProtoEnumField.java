@@ -62,6 +62,10 @@ public class LightProtoEnumField extends LightProtoNumberField {
         w.format("if (_%s != null) {\n", ccName);
         writeSetPresence(w);
         w.format("    %s = _%s;\n", ccName, ccName);
+        w.format("} else {\n");
+        // The number is not a value of the enum: like an unknown field, it is dropped,
+        // so parseFrom() must not cache the wire size as the serialized size
+        w.format("    _hasUnknownFields = true;\n");
         w.format("}\n");
     }
 

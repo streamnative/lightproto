@@ -28,6 +28,9 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
         w.format("%s _%s = %s;\n", field.getJavaType(), ccName, LightProtoNumberField.parseNumber(field));
         w.format("if (_%s != null) {\n", ccName);
         w.format("   %s(_%s);\n", Util.camelCase("add", singularName), ccName);
+        w.format("} else {\n");
+        // Dropped like an unknown field, as in LightProtoEnumField.parse()
+        w.format("   _hasUnknownFields = true;\n");
         w.format("}\n");
     }
 
@@ -77,6 +80,8 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
         w.format("    %s _%sPacked = %s;\n", field.getJavaType(), ccName, LightProtoNumberField.parseNumber(field));
         w.format("    if (_%sPacked != null) {\n", ccName);
         w.format("        %s(_%sPacked);\n", Util.camelCase("add", singularName), ccName);
+        w.format("    } else {\n");
+        w.format("        _hasUnknownFields = true;\n");
         w.format("    }\n");
         w.format("}\n");
     }

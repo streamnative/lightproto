@@ -91,6 +91,10 @@ public class EnumsTest {
         EnumTest1Optional parsed = new EnumTest1Optional();
         parsed.parseFrom(bb1, bb1.readableBytes());
         assertFalse(parsed.hasE());
+
+        // The dropped value is not serialized, so it must not count in the size either
+        assertEquals(0, parsed.getSerializedSize());
+        assertArrayEquals(new byte[0], parsed.toByteArray());
     }
 
     @Test
@@ -125,6 +129,14 @@ public class EnumsTest {
         assertEquals(E1.A1, parsed.getEAt(0));
         assertEquals(E1.B1, parsed.getEAt(1));
         assertEquals(E1.C1, parsed.getEAt(2));
+
+        Enums.EnumTest1Repeated pbet1 = Enums.EnumTest1Repeated.newBuilder()
+                .addE(Enums.E1.A1)
+                .addE(Enums.E1.B1)
+                .addE(Enums.E1.C1)
+                .build();
+        assertEquals(pbet1.getSerializedSize(), parsed.getSerializedSize());
+        assertArrayEquals(pbet1.toByteArray(), parsed.toByteArray());
     }
 
     @Test
@@ -159,5 +171,13 @@ public class EnumsTest {
         assertEquals(E1.A1, parsed.getEAt(0));
         assertEquals(E1.B1, parsed.getEAt(1));
         assertEquals(E1.C1, parsed.getEAt(2));
+
+        Enums.EnumTest1Packed pbet1 = Enums.EnumTest1Packed.newBuilder()
+                .addE(Enums.E1.A1)
+                .addE(Enums.E1.B1)
+                .addE(Enums.E1.C1)
+                .build();
+        assertEquals(pbet1.getSerializedSize(), parsed.getSerializedSize());
+        assertArrayEquals(pbet1.toByteArray(), parsed.toByteArray());
     }
 }
