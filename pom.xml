@@ -68,7 +68,7 @@
         <junit.version>5.7.0</junit.version>
         <netty.version>4.1.131.Final</netty.version>
         <roaster.version>2.22.2.Final</roaster.version>
-        <grpc.version>1.68.0</grpc.version>
+        <grpc.version>1.75.0</grpc.version>
 
         <jmh.version>1.37</jmh.version>
 
