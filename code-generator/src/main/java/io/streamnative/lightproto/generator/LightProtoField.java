@@ -163,6 +163,7 @@ public abstract class LightProtoField {
             clear(w);
             w.format("            _bitField%d &= ~%s;\n", bitFieldIndex(), fieldMask());
         }
+        w.format("            _cachedSize = -1;\n");
         w.format("            return this;\n");
         w.format("        }\n");
     }

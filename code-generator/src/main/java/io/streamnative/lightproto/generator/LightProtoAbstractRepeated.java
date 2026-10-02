@@ -34,6 +34,7 @@ public abstract class LightProtoAbstractRepeated extends LightProtoField {
     public void fieldClear(PrintWriter w, String enclosingType) {
         w.format("        public %s %s() {\n", enclosingType, Util.camelCase("clear", field.getName()));
         clear(w);
+        w.format("            _cachedSize = -1;\n");
         w.format("            return this;\n");
         w.format("        }\n");
     }
