@@ -189,12 +189,18 @@ public class LightProtoMessage {
             w.format("            checkRequiredFields();\n");
         }
         // The wire size is the serialized size only if re-serializing reproduces the
-        // wire. Besides unknown fields skipped here, _hasUnknownFields is set by enum
-        // parsers that drop an unknown value, by bool parsers that read a value other
-        // than 0 or 1, by map entries with unknown fields or an omitted key or value,
+        // wire, which valid but non-canonical encodings (overlong varints, repeated or
+        // default-valued fields, packed/unpacked mismatches, short negative int32s)
+        // and lengths that run past the end of the message break in either
+        // direction. getSerializedSize() therefore only trusts the sizes it computed
+        // itself, which it marks with the sign bit, and the wire size is kept only as
+        // clear()'s estimate of what the instance retains. _hasUnknownFields leaves
+        // -1 instead: it is set for unknown fields skipped here, by enum parsers that
+        // drop an unknown value, by bool parsers that read a value other than 0 or 1,
+        // by map entries with unknown fields or a missing or repeated key or value,
         // and after parsing a nested message whose _isSizeCached() is false. Only
-        // message and map field parsers emit that last check, so messages without such
-        // fields keep their parseFrom() unchanged.
+        // message and map field parsers emit that last check, so messages without
+        // such fields keep their parseFrom() unchanged.
         w.format("            if (!_hasUnknownFields) {\n");
         w.format("                _cachedSize = _size;\n");
         w.format("            }\n");
@@ -202,13 +208,14 @@ public class LightProtoMessage {
         w.format("        }\n");
 
         w.println("        /**");
-        w.println("         * Internal: whether the serialized size is cached. Right after parseFrom(),");
-        w.println("         * false means the wire size is not the serialized size, because of this");
-        w.println("         * message or one nested in it (e.g. dropped unknown fields). Public only so");
-        w.println("         * that generated messages in other packages can check nested fields of this type.");
+        w.println("         * Internal: whether a size is cached, either the wire size kept by parseFrom()");
+        w.println("         * or a size computed by getSerializedSize(). Right after parseFrom(), false");
+        w.println("         * means the wire size is not the serialized size, because of this message or");
+        w.println("         * one nested in it (e.g. dropped unknown fields). Public only so that generated");
+        w.println("         * messages in other packages can check nested fields of this type.");
         w.println("         */");
         w.format("        public boolean _isSizeCached() {\n");
-        w.format("            return _cachedSize > -1;\n");
+        w.format("            return _cachedSize != -1;\n");
         w.format("        }\n");
     }
 
@@ -307,11 +314,15 @@ public class LightProtoMessage {
         // for the rest _clearAndRelease() is behaviorally identical to clear().
         if (fields.stream().anyMatch(LightProtoField::needsRelease)) {
             // _cachedSize is the previous message's size at this point (parseFrom()
-            // and getSerializedSize() maintain it), so the gate is O(1) — a single
-            // unsigned compare: -1 (mutated since, unknown fields on the wire, or
-            // already cleared) is huge unsigned, taking the release path
-            // conservatively; over cleared fields it walks nothing.
-            w.format("            if (Integer.compareUnsigned(_cachedSize, LightProtoCodec.CLEAR_RETAIN_MAX) > 0) {\n");
+            // and getSerializedSize() maintain it), so the gate is O(1). The unsigned
+            // compare alone settles a parsed message (plain size); a size computed
+            // by getSerializedSize() has the sign bit set, and so does -1 (mutated
+            // since, unknown fields on the wire, or already cleared): those get
+            // compared with the bit masked off, -1 masking to Integer.MAX_VALUE to
+            // take the release path conservatively. Over cleared fields it walks
+            // nothing.
+            w.format("            if (Integer.compareUnsigned(_cachedSize, LightProtoCodec.CLEAR_RETAIN_MAX) > 0\n");
+            w.format("                    && (_cachedSize & Integer.MAX_VALUE) > LightProtoCodec.CLEAR_RETAIN_MAX) {\n");
             w.format("                return _clearAndRelease();\n");
             w.format("            }\n");
         }
@@ -516,8 +527,10 @@ public class LightProtoMessage {
     private void generateGetSerializedSize(PrintWriter w) {
         w.println("        /** Returns the serialized size of this message in bytes. */");
         w.format("@Override public int getSerializedSize() {\n");
-        w.format("    if (_cachedSize > -1) {\n");
-        w.format("        return _cachedSize;\n");
+        // A size computed below is cached with the sign bit set, which tells it
+        // apart from the wire size that parseFrom() leaves (>= 0) and from -1.
+        w.format("    if (_cachedSize < -1) {\n");
+        w.format("        return _cachedSize & Integer.MAX_VALUE;\n");
         w.format("    }\n");
         w.format("\n");
 
@@ -540,7 +553,7 @@ public class LightProtoMessage {
             });
         }
 
-        w.format("            _cachedSize = _size;\n");
+        w.format("            _cachedSize = _size | Integer.MIN_VALUE;\n");
         w.format("            return _size;\n");
         w.format("        }\n");
     }

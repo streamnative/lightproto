@@ -25,6 +25,7 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
 
     @Override
     public void parse(PrintWriter w) {
+        resetPackedSize(w);
         w.format("%s _%s = %s;\n", field.getJavaType(), ccName, LightProtoNumberField.parseNumber(field));
         w.format("if (_%s != null) {\n", ccName);
         w.format("   %s(_%s);\n", Util.camelCase("add", singularName), ccName);
@@ -74,6 +75,7 @@ public class LightProtoRepeatedEnumField extends LightProtoRepeatedNumberField {
     }
 
     public void parsePacked(PrintWriter w) {
+        resetPackedSize(w);
         w.format("int _%s = LightProtoCodec.readVarInt(_buffer);\n", Util.camelCase(singularName, "size"));
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));
         w.format("while (_buffer.readerIndex() < _%s) {\n", Util.camelCase(singularName, "endIdx"));

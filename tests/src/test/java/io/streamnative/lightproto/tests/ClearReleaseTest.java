@@ -83,6 +83,21 @@ public class ClearReleaseTest {
     }
 
     @Test
+    public void testSmallParsedMessageKeepsO1ClearRetention() {
+        // parseFrom() keeps the wire size for the gate, although getSerializedSize()
+        // does not trust it.
+        S built = new S().setId("small");
+        fillNames(built, 8 * 1024);
+        S s = new S();
+        s.parseFrom(built.toByteArray());
+        WeakReference<String> ref = new WeakReference<>(s.getNameAt(0));
+
+        s.clear();
+        System.gc();
+        assertNotNull(ref.get());
+    }
+
+    @Test
     public void testUnknownSizeReleasesConservatively() throws Exception {
         // Never serialized nor cleanly parsed: _cachedSize is -1, so clear()
         // cannot know the message was small and must take the release path.
