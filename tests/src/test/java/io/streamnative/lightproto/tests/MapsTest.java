@@ -17,6 +17,7 @@ package io.streamnative.lightproto.tests;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
+import com.google.protobuf.UnknownFieldSet;
 import com.google.protobuf.util.JsonFormat;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -679,6 +680,44 @@ public class MapsTest {
         verifyHolderSameAsProtobuf(wire);
     }
 
+    // --- Entries with an unknown enum value ---
+    // An entry whose value is not a number of the (closed) enum is dropped, as unknown values
+    // of other enum fields are: protobuf-java keeps it with the unknown fields.
+
+    @Test
+    public void testUnknownEnumValueDropsMapEntry() throws Exception {
+        // string_to_enum entry {key: "k", value: 5}: 5 is not a MapEnumValue number
+        byte[] wire = {0x3A, 0x05, 0x0A, 0x01, 'k', 0x10, 0x05};
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(0, pb.getStringToEnumCount());
+        assertTrue(pb.getUnknownFields().hasField(7));
+
+        MapMessage lp = parse(wire);
+        assertThrows(IllegalArgumentException.class, () -> lp.getStringToEnum("k"));
+        assertSameContent(MapsProtos.MapMessage.getDefaultInstance(), lp);
+        // No null value is left for equals(), hashCode(), JSON or text format to trip on
+        MapMessage empty = new MapMessage();
+        assertEquals(empty, lp);
+        assertEquals(empty.hashCode(), lp.hashCode());
+        assertEquals(empty.toJson(), lp.toJson());
+        assertEquals(empty.toTextFormat(), lp.toTextFormat());
+    }
+
+    @Test
+    public void testUnknownEnumValuesKeepOtherMapEntries() throws Exception {
+        // The entries for k2, k4 and the second k1 have values that are not MapEnumValue
+        // numbers: they are dropped, and the second k1 doesn't replace the first one
+        byte[] wire = enumEntry("k1", 1).concat(enumEntry("k2", 5)).concat(enumEntry("k3", 0))
+                .concat(enumEntry("k4", -1)).concat(enumEntry("k1", 7)).toByteArray();
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(Map.of("k1", MapsProtos.MapEnumValue.MAP_ENUM_ONE, "k3", MapsProtos.MapEnumValue.MAP_ENUM_ZERO),
+                pb.getStringToEnumMap());
+
+        // Compared without the unknown fields, which protobuf-java keeps and LightProto drops
+        assertSameContent(pb.toBuilder().setUnknownFields(UnknownFieldSet.getDefaultInstance()).build(),
+                parse(wire));
+    }
+
     // --- Helpers ---
 
     private byte[] serialize(MapMessage msg) {
@@ -726,6 +765,19 @@ public class MapsTest {
         MapMessage lp = new MapMessage();
         lp.parseFrom(wire);
         return lp;
+    }
+
+    /** A string_to_enum entry with a raw enum number, which may not be a MapEnumValue number. */
+    private static ByteString enumEntry(String key, int number) {
+        ByteString entry = UnknownFieldSet.newBuilder()
+                .addField(1, UnknownFieldSet.Field.newBuilder().addLengthDelimited(ByteString.copyFromUtf8(key)).build())
+                .addField(2, UnknownFieldSet.Field.newBuilder().addVarint(number).build())
+                .build()
+                .toByteString();
+        return UnknownFieldSet.newBuilder()
+                .addField(7, UnknownFieldSet.Field.newBuilder().addLengthDelimited(entry).build())
+                .build()
+                .toByteString();
     }
 
     /** Parses {@code wire} into a MapMessageHolder and checks it serializes like protobuf-java. */

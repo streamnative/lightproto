@@ -449,10 +449,24 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         w.format("    _hasUnknownFields = true;\n");
         w.format("}\n");
 
+        if (isEnumValue()) {
+            // A value that is not a number of the enum drops the entry, as unknown values of
+            // other enum fields are dropped (protobuf-java moves it to the unknown fields)
+            w.format("%s _%sEnumValue = %s.valueOf(_%sValue);\n",
+                    valueField.getJavaType(), ccName, valueField.getJavaType(), ccName);
+            w.format("if (_%sEnumValue == null) {\n", ccName);
+            w.format("    _hasUnknownFields = true;\n");
+            w.format("} else {\n");
+        }
+
         // Store into arrays
         generateKeyTempStore(w);
         generateValueTempStore(w);
         w.format("_%sCount++;\n", ccName);
+
+        if (isEnumValue()) {
+            w.format("}\n");
+        }
     }
 
     private void generateKeyTempDecl(PrintWriter w) {
@@ -473,6 +487,10 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("int _%sValueIdx = -1;\n", ccName);
         } else if (isMessageValue()) {
             // Message value: no temp needed, will be parsed directly
+        } else if (isEnumValue()) {
+            // The number, resolved once the entry is complete. 0 is the default when the value
+            // is missing: protoc requires it to be the first value of a map value enum.
+            w.format("int _%sValue = 0;\n", ccName);
         } else {
             w.format("%s _%sValue = %s;\n", valueField.getJavaType(), ccName, defaultForType(valueField));
         }
@@ -505,6 +523,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("            if (!_%sMsg._isSizeCached()) {\n", ccName);
             w.format("                _hasUnknownFields = true;\n");
             w.format("            }\n");
+        } else if (isEnumValue()) {
+            w.format("            _%sValue = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         } else {
             w.format("            _%sValue = %s;\n", ccName, LightProtoNumberField.parseNumber(valueField));
         }
@@ -549,6 +569,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("_%sVbh.len = _%sValueLen;\n", ccName, ccName);
         } else if (isMessageValue()) {
             // Already stored during parse (parseFrom was called on the array element)
+        } else if (isEnumValue()) {
+            w.format("_%sValues[_%sCount] = _%sEnumValue;\n", ccName, ccName, ccName);
         } else {
             w.format("_%sValues[_%sCount] = _%sValue;\n", ccName, ccName, ccName);
         }
@@ -559,8 +581,6 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         if (f.getJavaType().equals("long")) return "0L";
         if (f.getJavaType().equals("float")) return "0.0f";
         if (f.getJavaType().equals("double")) return "0.0";
-        // Same implicit default as a singular enum field (LightProtoEnumField)
-        if (f.isEnumField()) return String.format("%s.valueOf(0)", f.getJavaType());
         return "0";
     }
 
