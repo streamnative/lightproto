@@ -427,7 +427,7 @@ class LightProtoCodec {
 
     /**
      * Writes n as an unsigned 32-bit varint, at most 5 bytes, as protobuf encodes
-     * zigzag-encoded sint32 values: what computeVarUIntSize() counts.
+     * uint32 and zigzag-encoded sint32 values: what computeVarUIntSize() counts.
      * writeRawVarInt() is the int32 encoding, which writes a negative n as 10 bytes.
      */
     static int writeRawVarUInt(byte[] a, int i, int n) {

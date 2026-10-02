@@ -207,6 +207,13 @@ public class NumbersTest {
     }
 
     @ParameterizedTest
+    @ValueSource(ints = {Integer.MIN_VALUE, -1})
+    public void testUint32AboveIntMax(int value) throws Exception {
+        // 2^31 and 2^32 - 1: protobuf writes a uint32 as an unsigned varint, 5 bytes
+        verify(new Numbers().setXUint32(value), NumbersOuterClass.Numbers.newBuilder().setXUint32(value).build());
+    }
+
+    @ParameterizedTest
     @ValueSource(ints = {1 << 30, -(1 << 30) - 1, Integer.MAX_VALUE, Integer.MIN_VALUE})
     public void testSint32WithZigZagTopBitSet(int value) throws Exception {
         // The zigzag encoding of these values is >= 2^31 unsigned: still a 5-byte varint

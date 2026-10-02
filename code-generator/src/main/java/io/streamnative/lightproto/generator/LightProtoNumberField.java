@@ -55,8 +55,10 @@ public class LightProtoNumberField extends LightProtoField {
         } else if (field.getProtoType().equals("bool")) {
             writer = "writeRawByte";
             value = name + " ? 1 : 0";
-        } else if (field.getProtoType().equals("int32") || field.getProtoType().equals("uint32")) {
+        } else if (field.getProtoType().equals("int32")) {
             writer = "writeRawVarInt";
+        } else if (field.getProtoType().equals("uint32")) {
+            writer = "writeRawVarUInt";
         } else if (field.getProtoType().equals("sint32")) {
             writer = "writeRawSignedVarInt";
         } else if (field.getProtoType().equals("sint64")) {
@@ -140,7 +142,7 @@ public class LightProtoNumberField extends LightProtoField {
         } else if (field.getProtoType().equals("int32")) {
             return String.format("LightProtoCodec.computeVarIntSize(%s)", name);
         } else if (field.getProtoType().equals("uint32")) {
-            return String.format("LightProtoCodec.computeVarIntSize(%s)", name);
+            return String.format("LightProtoCodec.computeVarUIntSize(%s)", name);
         } else if (field.getProtoType().equals("int64")) {
             return String.format("LightProtoCodec.computeVarInt64Size(%s)", name);
         } else if (field.getProtoType().equals("uint64")) {

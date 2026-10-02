@@ -503,4 +503,22 @@ public class RepeatedNumbersTest {
         assertArrayEquals(pb.build().toByteArray(), lp.toByteArray());
         assertArrayEquals(pbPacked.build().toByteArray(), lpPacked.toByteArray());
     }
+
+    @Test
+    public void testUint32AboveIntMax() throws Exception {
+        // 2^31 and 2^32 - 1: protobuf writes a uint32 as an unsigned varint, 5 bytes
+        int[] values = {Integer.MIN_VALUE, -1};
+        Repeated lp = new Repeated();
+        RepeatedPacked lpPacked = new RepeatedPacked();
+        RepeatedNumbers.Repeated.Builder pb = RepeatedNumbers.Repeated.newBuilder();
+        RepeatedNumbers.RepeatedPacked.Builder pbPacked = RepeatedNumbers.RepeatedPacked.newBuilder();
+        for (int value : values) {
+            lp.addXUint32(value);
+            lpPacked.addXUint32(value);
+            pb.addXUint32(value);
+            pbPacked.addXUint32(value);
+        }
+        assertArrayEquals(pb.build().toByteArray(), lp.toByteArray());
+        assertArrayEquals(pbPacked.build().toByteArray(), lpPacked.toByteArray());
+    }
 }
