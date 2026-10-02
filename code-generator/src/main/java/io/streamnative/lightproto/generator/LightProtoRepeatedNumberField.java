@@ -45,19 +45,44 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
         }
     }
 
+    /**
+     * Packed varint fields keep the payload size that getSerializedSize() computes, so that
+     * _writeTo() doesn't walk the elements again for the length prefix. Every serialization runs
+     * getSerializedSize() right before _writeTo(), and every change to the elements resets
+     * _cachedSize, so getSerializedSize() recomputes the payload size whenever the elements
+     * changed. The exception is parseFrom(), which caches the message size without computing any
+     * field: parsing the field resets its payload size to -1, and _writeTo() computes it when
+     * unknown. clear() leaves it alone: an empty field isn't written.
+     */
+    boolean cachesPackedSize() {
+        return field.isPacked() && LightProtoNumberField.fixedDataSize(field) < 0;
+    }
+
+    /** Emits the payload size reset that parsing this field performs, see {@link #cachesPackedSize()}. */
+    void resetPackedSize(PrintWriter w) {
+        if (cachesPackedSize()) {
+            w.format("_%sPackedSize = -1;\n", pluralName);
+        }
+    }
+
     @Override
     public void declaration(PrintWriter w) {
         w.format("private %s[] %s = null;\n", field.getJavaType(), pluralName);
         w.format("private int _%sCount = 0;\n", pluralName);
+        if (cachesPackedSize()) {
+            w.format("private int _%sPackedSize = -1;\n", pluralName);
+        }
     }
 
     @Override
     public void parse(PrintWriter w) {
+        resetPackedSize(w);
         LightProtoNumberField.parseNumberInto(w, field, "_" + ccName,
                 Util.camelCase("add", singularName) + "(%s);");
     }
 
     public void parsePacked(PrintWriter w) {
+        resetPackedSize(w);
         w.format("int _%s = LightProtoCodec.readVarInt(_buffer);\n", Util.camelCase(singularName, "size"));
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));
         w.format("while (_buffer.readerIndex() < _%s) {\n", Util.camelCase(singularName, "endIdx"));
@@ -90,11 +115,15 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
             if (fixedSize >= 0) {
                 w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sCount * %d);\n", sink.var, pluralName, fixedSize);
             } else {
-                w.format("    int _%sSize = 0;\n", pluralName);
-                w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
-                w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
-                w.format("}\n");
+                w.format("    int _%sSize = _%sPackedSize;\n", pluralName, pluralName);
+                w.format("    if (_%sSize < 0) {\n", pluralName);
+                w.format("        _%sSize = 0;\n", pluralName);
+                w.format("        for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+                w.format("            %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("            _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
+                w.format("        }\n");
+                w.format("        _%sPackedSize = _%sSize;\n", pluralName, pluralName);
+                w.format("    }\n");
                 w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sSize);\n", sink.var, pluralName);
             }
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
@@ -255,6 +284,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
                 w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
                 w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
                 w.format("}\n");
+                w.format("    _%sPackedSize = _%sSize;\n", pluralName, pluralName);
             }
             w.format("    _size += %s_SIZE;\n", tagName());
             w.format("    _size += LightProtoCodec.computeVarIntSize(_%sSize);\n", pluralName);
