@@ -572,6 +572,14 @@ public class MapsTest {
     }
 
     @Test
+    public void testOmittedKeyWithNumericValue() throws Exception {
+        // string_to_int entry {value: 7}
+        byte[] wire = {0x0A, 0x02, 0x10, 0x07};
+        assertEquals(Map.of("", 7), MapsProtos.MapMessage.parseFrom(wire).getStringToIntMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
     public void testOmittedNumericKeyAndValues() throws Exception {
         byte[] wire = {
                 0x0A, 0x03, 0x0A, 0x01, 'k', // string_to_int entry {key: "k"}
@@ -611,6 +619,63 @@ public class MapsTest {
     public void testOmittedValueInMapMessageValue() throws Exception {
         // nested_maps entry {key: "a", value: {int_to_string entry {key: 7}}}
         byte[] wire = {0x12, 0x09, 0x0A, 0x01, 'a', 0x12, 0x04, 0x12, 0x02, 0x08, 0x07};
+        verifyHolderSameAsProtobuf(wire);
+    }
+
+    // --- Entries with a repeated key or value ---
+    // An entry that repeats its key or value reads as the last occurrence, in protobuf-java
+    // too, and is serialized with each of them once: smaller than its parsed size.
+
+    @Test
+    public void testRepeatedStringKey() throws Exception {
+        // string_to_int entry {key: "a", key: "k", value: 7}
+        byte[] wire = {0x0A, 0x08, 0x0A, 0x01, 'a', 0x0A, 0x01, 'k', 0x10, 0x07};
+        assertEquals(Map.of("k", 7), MapsProtos.MapMessage.parseFrom(wire).getStringToIntMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testRepeatedStringValue() throws Exception {
+        // int_to_string entry {key: 1, value: "a", value: "b"}
+        byte[] wire = {0x12, 0x08, 0x08, 0x01, 0x12, 0x01, 'a', 0x12, 0x01, 'b'};
+        assertEquals(Map.of(1, "b"), MapsProtos.MapMessage.parseFrom(wire).getIntToStringMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testRepeatedMessageValue() throws Exception {
+        // string_to_msg entry {key: "k", value: {id: 1}, value: {id: 2}}. Both values set the
+        // same field, so protobuf-java, which merges them, also reads {id: 2}.
+        byte[] wire = {0x1A, 0x0B, 0x0A, 0x01, 'k', 0x12, 0x02, 0x08, 0x01, 0x12, 0x02, 0x08, 0x02};
+        assertEquals(Map.of("k", MapsProtos.MapNestedValue.newBuilder().setId(2).build()),
+                MapsProtos.MapMessage.parseFrom(wire).getStringToMsgMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testRepeatedKeysAndValues() throws Exception {
+        byte[] wire = {
+                // string_to_int entry {key: "k", value: 1, value: 2}
+                0x0A, 0x07, 0x0A, 0x01, 'k', 0x10, 0x01, 0x10, 0x02,
+                // string_to_bytes entry {key: "k", value: "a", value: "bc"}
+                0x22, 0x0A, 0x0A, 0x01, 'k', 0x12, 0x01, 'a', 0x12, 0x02, 'b', 'c',
+                // bool_to_string entry {key: true, key: false, value: "v"}
+                0x2A, 0x07, 0x08, 0x01, 0x08, 0x00, 0x12, 0x01, 'v',
+                // string_to_enum entry {key: "e", value: MAP_ENUM_ONE, value: MAP_ENUM_ZERO}
+                0x3A, 0x07, 0x0A, 0x01, 'e', 0x10, 0x01, 0x10, 0x00,
+        };
+        MapsProtos.MapMessage pb = MapsProtos.MapMessage.parseFrom(wire);
+        assertEquals(Map.of("k", 2), pb.getStringToIntMap());
+        assertEquals(Map.of("k", ByteString.copyFromUtf8("bc")), pb.getStringToBytesMap());
+        assertEquals(Map.of(false, "v"), pb.getBoolToStringMap());
+        assertEquals(Map.of("e", MapsProtos.MapEnumValue.MAP_ENUM_ZERO), pb.getStringToEnumMap());
+        verifySameAsProtobuf(wire);
+    }
+
+    @Test
+    public void testRepeatedKeyInNestedMessage() throws Exception {
+        // inner { string_to_int entry {key: "a", key: "k", value: 7} }
+        byte[] wire = {0x0A, 0x0A, 0x0A, 0x08, 0x0A, 0x01, 'a', 0x0A, 0x01, 'k', 0x10, 0x07};
         verifyHolderSameAsProtobuf(wire);
     }
 
