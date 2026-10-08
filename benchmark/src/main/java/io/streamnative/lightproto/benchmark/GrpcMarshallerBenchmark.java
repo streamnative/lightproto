@@ -204,7 +204,7 @@ public class GrpcMarshallerBenchmark {
     }
 
     /** grpc-netty's NettyWritableBuffer, with its allocator's 4 KiB to 1 MiB sizing. */
-    private static final class TransportBuffer implements WritableBuffer {
+    static final class TransportBuffer implements WritableBuffer {
         private final ByteBuf buf;
 
         TransportBuffer(int capacityHint) {
