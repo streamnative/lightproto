@@ -377,6 +377,16 @@ public class LightProtoService {
         w.println("                            if (nioBuf != null && nioBuf.remaining() == size) {");
         w.println("                                // The whole message is in one transport buffer: parse it in place,");
         w.println("                                // and materialize before close() hands the buffer back");
+        w.println("                                if (nioBuf.isDirect() && size < LightProtoCodec.SEGMENTED_PARSE_MIN) {");
+        w.println("                                    LightProtoCodec.SegmentedByteBuf view = LightProtoCodec.PARSE_VIEW.get().reset(nioBuf);");
+        w.println("                                    try {");
+        w.println("                                        msg.parseFrom(view, size);");
+        w.println("                                        msg.materialize();");
+        w.println("                                    } finally {");
+        w.println("                                        view.detach();");
+        w.println("                                    }");
+        w.println("                                    return msg;");
+        w.println("                                }");
         w.println("                                msg.parseFrom(io.netty.buffer.Unpooled.wrappedBuffer(nioBuf), size);");
         w.println("                                msg.materialize();");
         w.println("                                return msg;");

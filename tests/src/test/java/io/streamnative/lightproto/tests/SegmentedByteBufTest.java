@@ -61,6 +61,18 @@ public class SegmentedByteBufTest {
     }
 
     @Test
+    void testSingleSegmentIsResetForEachBuffer() {
+        // The view a gRPC marshaller parses a message received in one direct buffer through
+        LightProtoCodec.SegmentedByteBuf view = new LightProtoCodec.SegmentedByteBuf();
+        assertSameReads(CONTENT, view.reset(direct(CONTENT, 0)));
+        // A transport buffer's content can start past position 0
+        assertSameReads(CONTENT, view.reset(direct(CONTENT, 7)));
+        byte[] other = new byte[CONTENT.length + 5];
+        new Random(2).nextBytes(other);
+        assertSameReads(other, view.reset(direct(other, 3)));
+    }
+
+    @Test
     void testHeapEmptyAndDirectSegments() {
         // A heap segment that doesn't start at position 0, an empty segment, and a direct segment
         ByteBuffer heap = ByteBuffer.wrap(new byte[20]);
@@ -178,6 +190,15 @@ public class SegmentedByteBufTest {
             start = end;
         }
         return segments.toArray(new ByteBuffer[0]);
+    }
+
+    /** A direct buffer holding {@code content} from {@code position} to its limit. */
+    private static ByteBuffer direct(byte[] content, int position) {
+        ByteBuffer buffer = ByteBuffer.allocateDirect(position + content.length);
+        buffer.position(position);
+        buffer.put(content);
+        buffer.position(position);
+        return buffer;
     }
 
     private static ByteBuf wrap(ByteBuffer... segments) {
