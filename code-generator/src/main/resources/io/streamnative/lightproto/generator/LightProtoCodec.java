@@ -377,6 +377,13 @@ class LightProtoCodec {
     // where a 64 KiB value read as a byte[] parses in 0.54x the time of the copy.
     static final int SEGMENTED_PARSE_MIN = 16 * 1024;
 
+    // The view through which a gRPC marshaller parses a message smaller than SEGMENTED_PARSE_MIN
+    // received in one direct buffer. parse() materializes the message before returning, which copies
+    // everything out of the view, so each thread reuses one instead of wrapping every buffer in a new
+    // ByteBuf: 13 ns and 128 bytes less per 100-byte message. A larger message gains little from it,
+    // and parsing a message of 1024 records through it was 7% slower, so those keep a new wrapper.
+    static final ThreadLocal<SegmentedByteBuf> PARSE_VIEW = ThreadLocal.withInitial(SegmentedByteBuf::new);
+
     /** Returns current if it can hold size bytes, otherwise a larger replacement. */
     static byte[] scratchFor(byte[] current, int size) {
         if (current != null && current.length >= size) {
@@ -817,6 +824,36 @@ class LightProtoCodec {
             if (offsets[count] > 0) {
                 select(0);
             }
+        }
+
+        /** A single-segment buffer, pointed at one ByteBuffer after another by {@link #reset}. */
+        SegmentedByteBuf() {
+            super(0);
+            segments = new ByteBuffer[1];
+            offsets = new int[2];
+            addresses = new long[1];
+        }
+
+        /** Makes this single-segment buffer wrap the remaining bytes of {@code b}, from index 0. */
+        SegmentedByteBuf reset(ByteBuffer b) {
+            ByteBuffer segment = b.position() == 0 ? b : b.slice();
+            int size = segment.remaining();
+            segments[0] = segment;
+            offsets[1] = size;
+            addresses[0] = PlatformDependent.hasUnsafe() && segment.isDirect()
+                    ? PlatformDependent.directBufferAddress(segment) : 0;
+            maxCapacity(size);
+            setIndex(0, size);
+            if (size > 0) {
+                select(0);
+            }
+            return this;
+        }
+
+        /** Drops the reference to the ByteBuffer that {@link #reset} last wrapped. */
+        void detach() {
+            segments[0] = null;
+            current = null;
         }
 
         /** Makes the segment holding {@code index} the current one. */

@@ -62,6 +62,49 @@ public class GrpcMarshallerParseTest {
         assertEquals(expected, parsed);
     }
 
+    @Test
+    void testConsecutiveMessagesInOneBufferAreParsedInPlace() {
+        // Each thread parses a message under 16 KiB received in one direct buffer through the same
+        // view, which must not carry anything over from one message to the next. Larger ones get a
+        // new wrapper
+        List<GrpcPayload> parsed = new ArrayList<>();
+        List<GrpcPayload> expected = new ArrayList<>();
+        for (int dataSize : new int[] {4096, 100, 0, 64 * 1024, 7, 15 * 1024}) {
+            GrpcPayload message = GrpcPayloads.create(dataSize, dataSize);
+            List<TrackingBuffer> buffers = track(split(message.toByteArray(), 1), true);
+            parsed.add(MARSHALLER.parse(openStream(buffers)));
+            expected.add(message);
+            assertEquals(0, buffers.get(0).bytesRead, "The message should not be copied out of the buffer");
+            assertEquals(1, buffers.get(0).closeCount);
+        }
+        // close() overwrote every buffer, so no message may still refer to one
+        assertEquals(expected, parsed);
+    }
+
+    @Test
+    void testFailedParseInOneBufferDoesNotAffectTheNext() {
+        byte[] serialized = new GrpcPayload().setData(new byte[200]).toByteArray();
+        byte[] truncated = java.util.Arrays.copyOf(serialized, 100);
+        assertThrows(RuntimeException.class, () -> MARSHALLER.parse(openStream(track(split(truncated, 1), true))));
+
+        GrpcPayload expected = GrpcPayloads.create(5, 100);
+        assertEquals(expected, MARSHALLER.parse(openStream(track(split(expected.toByteArray(), 1), true))));
+    }
+
+    @Test
+    void testMessageInOneHeapBufferIsParsedInPlace() {
+        GrpcPayload expected = GrpcPayloads.create(6, 100);
+        byte[] serialized = expected.toByteArray();
+        ByteBuffer heap = ByteBuffer.allocate(serialized.length).put(serialized).flip();
+        List<TrackingBuffer> buffers = track(List.of(heap), true);
+
+        GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
+
+        assertEquals(0, buffers.get(0).bytesRead, "The message should not be copied out of the buffer");
+        assertEquals(1, buffers.get(0).closeCount);
+        assertEquals(expected, parsed);
+    }
+
     @ParameterizedTest
     @ValueSource(ints = {16 * 1024, 64 * 1024})
     void testLargeMessageAcrossBuffersIsParsedInPlace(int dataSize) {
