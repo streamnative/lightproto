@@ -37,8 +37,9 @@ import static org.junit.jupiter.api.Assertions.*;
  * Verifies that the gRPC marshaller returns a leak-proof, Drainable stream.
  * The marshaller serializes into a byte[]-backed DrainableByteArrayInputStream. Closing
  * the stream hands its array to the closing thread, which serializes its next message
- * into it. No ref-counted object escapes stream(), so a stream that gRPC drops without
- * closing only leaves its array to the garbage collector.
+ * into it. The array is not ref-counted, so a stream that gRPC drops without closing only
+ * leaves it to the garbage collector. (Large heap bytes values are written from their own
+ * buffers, which the stream retains: see GrpcMarshallerGatherTest.)
  */
 public class GrpcMarshallerBufferLeakTest {
 
@@ -262,13 +263,18 @@ public class GrpcMarshallerBufferLeakTest {
         return new WeakReference<>(out.array);
     }
 
-    /** Drain target that records the array the stream writes from. */
+    /**
+     * Drain target that records the array the stream writes from first: the marshaller's own
+     * array, which the stream also writes large payloads around.
+     */
     private static final class RecordingOutputStream extends ByteArrayOutputStream {
         byte[] array;
 
         @Override
         public synchronized void write(byte[] b, int off, int len) {
-            array = b;
+            if (array == null) {
+                array = b;
+            }
             super.write(b, off, len);
         }
     }

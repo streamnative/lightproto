@@ -51,6 +51,7 @@ public class LightProtoService {
 
         // Drainable InputStream for efficient writes into gRPC framer
         generateDrainableByteArrayInputStream(w);
+        generateGatheringInputStream(w);
 
         // Marshaller factory method
         generateMarshallerFactory(w);
@@ -137,8 +138,9 @@ public class LightProtoService {
         // Each thread reuses one array for its outbound messages: stream() takes the thread's
         // array, and closing the stream hands it back. Over Netty, gRPC drains and closes the
         // stream inside writeMessage(), on the sending thread, so steady-state sends allocate no
-        // array. Nothing is reference counted: a stream that is never closed only leaves its
-        // array to the garbage collector. Arrays above SPARE_ARRAY_MAX, gRPC's default maximum
+        // array. The array is not reference counted: a stream that is never closed only leaves
+        // it to the garbage collector (GatheringInputStream also retains the buffers of the large
+        // values it writes). Arrays above SPARE_ARRAY_MAX, gRPC's default maximum
         // inbound message size, are not kept, so outlier messages don't pin larger allocations
         // on every thread that sent one.
         w.println("    private static final int SPARE_ARRAY_MAX = 4 * 1024 * 1024;");
@@ -181,6 +183,143 @@ public class LightProtoService {
         w.println("    }\n");
     }
 
+    private void generateGatheringInputStream(PrintWriter w) {
+        // A message with large heap bytes values: the array holds everything else, and the
+        // stream reads its pieces in order, the array up to region 0, region 0, the array up
+        // to region 1, and so on. Each region's buffer stays retained until close(), so the
+        // caller may release it once stream() returns, but must not change its contents.
+        w.println("    private static final class GatheringInputStream extends java.io.InputStream");
+        w.println("            implements io.grpc.Drainable, io.grpc.KnownLength {");
+        w.println("        private static final byte[] CLOSED = new byte[0];");
+        w.println();
+        w.println("        private byte[] buf;");
+        w.println("        private final int length;");
+        w.println("        private final int count;");
+        w.println("        private final int[] pos;");
+        w.println("        private final io.netty.buffer.ByteBuf[] bufs;");
+        w.println("        private final byte[][] arrays;");
+        w.println("        private final int[] idx;");
+        w.println("        private final int[] len;");
+        w.println("        private int remaining;");
+        // The piece being read, 2k for the array before region k and 2k + 1 for region k,
+        // and the bytes of it already read
+        w.println("        private int piece;");
+        w.println("        private int offset;");
+        w.println();
+        w.println("        GatheringInputStream(byte[] buf, int length, int size, LightProtoCodec.Gather g) {");
+        w.println("            this.buf = buf;");
+        w.println("            this.length = length;");
+        w.println("            this.count = g.count;");
+        w.println("            this.pos = java.util.Arrays.copyOf(g.pos, count);");
+        w.println("            this.bufs = java.util.Arrays.copyOf(g.bufs, count);");
+        w.println("            this.arrays = java.util.Arrays.copyOf(g.arrays, count);");
+        w.println("            this.idx = java.util.Arrays.copyOf(g.idx, count);");
+        w.println("            this.len = java.util.Arrays.copyOf(g.len, count);");
+        w.println("            this.remaining = size;");
+        w.println("            java.util.Arrays.fill(g.bufs, 0, count, null);");
+        w.println("            java.util.Arrays.fill(g.arrays, 0, count, null);");
+        w.println("            g.count = 0;");
+        w.println("        }");
+        w.println();
+        w.println("        private byte[] pieceArray() {");
+        w.println("            return (piece & 1) == 0 ? buf : arrays[piece >> 1];");
+        w.println("        }");
+        w.println();
+        w.println("        private int pieceStart() {");
+        w.println("            int k = piece >> 1;");
+        w.println("            if ((piece & 1) != 0) {");
+        w.println("                return idx[k];");
+        w.println("            }");
+        w.println("            return k == 0 ? 0 : pos[k - 1];");
+        w.println("        }");
+        w.println();
+        w.println("        private int pieceLength() {");
+        w.println("            int k = piece >> 1;");
+        w.println("            if ((piece & 1) != 0) {");
+        w.println("                return len[k];");
+        w.println("            }");
+        w.println("            return (k < count ? pos[k] : length) - (k == 0 ? 0 : pos[k - 1]);");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public int available() {");
+        w.println("            return remaining;");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public int read() {");
+        w.println("            while (remaining > 0) {");
+        w.println("                if (offset < pieceLength()) {");
+        w.println("                    remaining--;");
+        w.println("                    return pieceArray()[pieceStart() + offset++] & 0xFF;");
+        w.println("                }");
+        w.println("                piece++;");
+        w.println("                offset = 0;");
+        w.println("            }");
+        w.println("            return -1;");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public int read(byte[] b, int off, int n) {");
+        w.println("            java.util.Objects.checkFromIndexSize(off, n, b.length);");
+        w.println("            if (n == 0) {");
+        w.println("                return 0;");
+        w.println("            }");
+        w.println("            if (remaining == 0) {");
+        w.println("                return -1;");
+        w.println("            }");
+        w.println("            int total = 0;");
+        w.println("            while (total < n && remaining > 0) {");
+        w.println("                int c = Math.min(pieceLength() - offset, n - total);");
+        w.println("                if (c == 0) {");
+        w.println("                    piece++;");
+        w.println("                    offset = 0;");
+        w.println("                    continue;");
+        w.println("                }");
+        w.println("                System.arraycopy(pieceArray(), pieceStart() + offset, b, off + total, c);");
+        w.println("                offset += c;");
+        w.println("                total += c;");
+        w.println("                remaining -= c;");
+        w.println("            }");
+        w.println("            return total;");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public int drainTo(java.io.OutputStream target) throws java.io.IOException {");
+        w.println("            int total = 0;");
+        w.println("            while (remaining > 0) {");
+        w.println("                int c = pieceLength() - offset;");
+        w.println("                if (c > 0) {");
+        w.println("                    target.write(pieceArray(), pieceStart() + offset, c);");
+        w.println("                    total += c;");
+        w.println("                    remaining -= c;");
+        w.println("                }");
+        w.println("                piece++;");
+        w.println("                offset = 0;");
+        w.println("            }");
+        w.println("            return total;");
+        w.println("        }");
+        w.println();
+        w.println("        @Override");
+        w.println("        public void close() {");
+        w.println("            byte[] a = this.buf;");
+        w.println("            if (a.length == 0) {");
+        w.println("                return;");
+        w.println("            }");
+        w.println("            this.buf = CLOSED;");
+        w.println("            this.remaining = 0;");
+        w.println("            for (int k = 0; k < count; k++) {");
+        w.println("                bufs[k].release();");
+        w.println("                bufs[k] = null;");
+        w.println("                arrays[k] = null;");
+        w.println("            }");
+        w.println("            if (a.length <= SPARE_ARRAY_MAX) {");
+        w.println("                SPARE_ARRAY.set(a);");
+        w.println("            }");
+        w.println("        }");
+        w.println("    }\n");
+    }
+
     private void generateMarshallerFactory(PrintWriter w) {
         w.println("    private static <T extends LightProtoCodec.LightProtoMessage> io.grpc.MethodDescriptor.Marshaller<T> marshaller(");
         w.println("            java.util.function.Supplier<T> factory) {");
@@ -194,8 +333,28 @@ public class LightProtoService {
         w.println("                } else {");
         w.println("                    a = new byte[size];");
         w.println("                }");
-        w.println("                value._writeTo(a, 0);");
-        w.println("                return new DrainableByteArrayInputStream(a, size);");
+        // Large heap bytes values are gathered rather than copied: the stream writes them
+        // to the transport from the buffers holding them, and close() releases them. A
+        // message smaller than GATHER_MIN has no value to gather, and skips the lookup
+        w.println("                if (size < LightProtoCodec.GATHER_MIN) {");
+        w.println("                    value._writeTo(a, 0);");
+        w.println("                    return new DrainableByteArrayInputStream(a, size);");
+        w.println("                }");
+        w.println("                LightProtoCodec.Gather g = LightProtoCodec.GATHER.get();");
+        w.println("                int length;");
+        w.println("                g.active = true;");
+        w.println("                try {");
+        w.println("                    length = value._writeTo(a, 0);");
+        w.println("                } catch (Throwable t) {");
+        w.println("                    g.releaseAll();");
+        w.println("                    throw t;");
+        w.println("                } finally {");
+        w.println("                    g.active = false;");
+        w.println("                }");
+        w.println("                if (g.count == 0) {");
+        w.println("                    return new DrainableByteArrayInputStream(a, size);");
+        w.println("                }");
+        w.println("                return new GatheringInputStream(a, length, size, g);");
         w.println("            }");
         w.println("            @Override");
         w.println("            public T parse(java.io.InputStream stream) {");

@@ -179,8 +179,7 @@ public abstract class LightProtoField {
     /**
      * Where generated serialization code writes. Both sinks are addressed by the int
      * cursor {@code _i}, and every LightProtoCodec raw writer is overloaded for both,
-     * so a field emitter differs between them only in the sink variable and in how
-     * bulk data is copied out of a ByteBuf.
+     * so a field emitter differs between them only in the sink variable.
      */
     enum WriteSink {
         /** {@code byte[] _a}: a heap buffer's backing array, or the scratch array. */
@@ -194,14 +193,12 @@ public abstract class LightProtoField {
             this.var = var;
         }
 
-        /** Emits a copy of {@code len} bytes of ByteBuf {@code src} from {@code srcIdx} to the cursor, advancing it. */
+        /**
+         * Emits a copy of {@code len} bytes of ByteBuf {@code src} from {@code srcIdx} to the cursor, advancing it.
+         * Within the gRPC marshaller's stream(), a large array copy is gathered instead, without advancing the cursor.
+         */
         void copyBytes(PrintWriter w, String src, String srcIdx, String len) {
-            if (this == ARRAY) {
-                w.format("%s.getBytes(%s, _a, _i, %s);\n", src, srcIdx, len);
-                w.format("_i += %s;\n", len);
-            } else {
-                w.format("_i = LightProtoCodec.copyRawBytes(%s, %s, _nb, _i, %s);\n", src, srcIdx, len);
-            }
+            w.format("_i = LightProtoCodec.copyRawBytes(%s, %s, %s, _i, %s);\n", src, srcIdx, var, len);
         }
     }
 

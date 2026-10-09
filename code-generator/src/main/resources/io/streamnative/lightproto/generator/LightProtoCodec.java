@@ -597,6 +597,74 @@ class LightProtoCodec {
         return i + len;
     }
 
+    /**
+     * Copies {@code len} bytes of {@code src} into the array at {@code i}, unless the
+     * current thread is gathering: then a large region of a heap buffer is recorded by
+     * reference instead, with {@code src} retained, and the cursor is not advanced.
+     */
+    static int copyRawBytes(ByteBuf src, int srcIdx, byte[] a, int i, int len) {
+        if (len >= GATHER_MIN && src.hasArray()) {
+            Gather g = GATHER.get();
+            if (g.active) {
+                g.add(i, src, srcIdx, len);
+                return i;
+            }
+        }
+        src.getBytes(srcIdx, a, i, len);
+        return i + len;
+    }
+
+    // The outbound gRPC marshaller writes a message into an array, which gRPC then copies into
+    // its transport buffers. A bytes value at least this large is not copied into the array:
+    // the stream writes it to the transport straight from the heap buffer holding it. For a
+    // 1 KiB value that costs more than the copy it saves (150 vs 122 ns per message); from
+    // 16 KiB, one HTTP/2 DATA frame, messages are written 1.5-2.7x faster.
+    static final int GATHER_MIN = 16 * 1024;
+
+    static final ThreadLocal<Gather> GATHER = ThreadLocal.withInitial(Gather::new);
+
+    /**
+     * The regions of heap buffers that a gathering write left out of its array: region k is
+     * {@code len[k]} bytes of {@code arrays[k]} from {@code idx[k]}, belongs at array position
+     * {@code pos[k]}, and {@code bufs[k]} holds a reference to it.
+     */
+    static final class Gather {
+        boolean active;
+        int count;
+        int[] pos = new int[4];
+        ByteBuf[] bufs = new ByteBuf[4];
+        byte[][] arrays = new byte[4][];
+        int[] idx = new int[4];
+        int[] len = new int[4];
+
+        void add(int p, ByteBuf b, int i, int l) {
+            if (count == pos.length) {
+                int n = count * 2;
+                pos = java.util.Arrays.copyOf(pos, n);
+                bufs = java.util.Arrays.copyOf(bufs, n);
+                arrays = java.util.Arrays.copyOf(arrays, n);
+                idx = java.util.Arrays.copyOf(idx, n);
+                len = java.util.Arrays.copyOf(len, n);
+            }
+            pos[count] = p;
+            bufs[count] = b.retain();
+            arrays[count] = b.array();
+            idx[count] = b.arrayOffset() + i;
+            len[count] = l;
+            count++;
+        }
+
+        /** Releases the regions gathered so far, after a write that failed. */
+        void releaseAll() {
+            for (int k = 0; k < count; k++) {
+                bufs[k].release();
+                bufs[k] = null;
+                arrays[k] = null;
+            }
+            count = 0;
+        }
+    }
+
     static String readString(ByteBuf b, int index, int len) {
         if (HAS_UNSAFE && STRING_VALUE_OFFSET >= 0) {
             try {
