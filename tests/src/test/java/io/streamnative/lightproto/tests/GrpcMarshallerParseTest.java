@@ -80,10 +80,15 @@ public class GrpcMarshallerParseTest {
 
     @Test
     void testFieldsSplitAcrossBuffersAreParsedInPlace() {
-        // One byte per buffer: every tag, length, and value straddles buffers
+        // One buffer up to the end of the data, then one byte per buffer: every tag, length, and
+        // value after the data straddles buffers. Since gRPC 1.82.4, CompositeReadableBuffer merges
+        // a run of small buffers once 1000 have arrived or a large one follows, so one-byte
+        // buffers can't carry a whole message (SegmentedByteBufTest reads across one-byte segments)
         GrpcPayload expected = GrpcPayloads.create(3, 16 * 1024);
         byte[] serialized = expected.toByteArray();
-        List<TrackingBuffer> buffers = track(split(serialized, serialized.length), true);
+        int head = new GrpcPayload().setName(expected.getName()).setData(expected.getData()).getSerializedSize();
+        assertTrue(serialized.length - head < 1000);
+        List<TrackingBuffer> buffers = track(splitBytesAfter(serialized, head), true);
 
         GrpcPayload parsed = MARSHALLER.parse(openStream(buffers));
 
@@ -211,6 +216,19 @@ public class GrpcMarshallerParseTest {
             ByteBuffer piece = ByteBuffer.allocateDirect(length);
             piece.put(message, offset, length).flip();
             memory.add(piece);
+        }
+        return memory;
+    }
+
+    /** Splits a message into one piece of its first {@code head} bytes, then one piece per byte. */
+    private static List<ByteBuffer> splitBytesAfter(byte[] message, int head) {
+        List<ByteBuffer> memory = new ArrayList<>();
+        for (int offset = 0; offset < message.length; ) {
+            int length = offset == 0 ? head : 1;
+            ByteBuffer piece = ByteBuffer.allocateDirect(length);
+            piece.put(message, offset, length).flip();
+            memory.add(piece);
+            offset += length;
         }
         return memory;
     }

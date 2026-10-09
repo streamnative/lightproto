@@ -55,6 +55,9 @@ public class GrpcNettyTransportTest {
 
     private static final String ONE_BUFFER = "one buffer";
     private static final String SEVERAL_BUFFERS = "several buffers";
+    // Since gRPC 1.82.4 the deframer merges a run of small buffers that a large one follows into a
+    // heap array without ByteBuffer access, so the marshaller copies a message that starts with one
+    private static final String MERGED_BUFFERS = "merged buffers";
 
     private final List<GrpcPayload> serverReceived = new CopyOnWriteArrayList<>();
     private final InspectingMarshaller responseMarshaller =
@@ -154,8 +157,18 @@ public class GrpcNettyTransportTest {
             assertEquals(sent.get(i), serverReceived.get(i), "Request " + i);
             assertEquals(sent.get(i), received.get(i), "Response " + i);
         }
-        assertEquals(Collections.nCopies(sent.size(), SEVERAL_BUFFERS), responseMarshaller.shapes);
-        assertEquals(Collections.nCopies(sent.size(), 0), responseMarshaller.bytesCopied);
+        int inPlace = 0;
+        for (int i = 0; i < sent.size(); i++) {
+            int copied = responseMarshaller.bytesCopied.get(i);
+            if (responseMarshaller.shapes.get(i).equals(SEVERAL_BUFFERS)) {
+                assertEquals(0, copied, "Response " + i);
+                inPlace++;
+            } else {
+                assertEquals(MERGED_BUFFERS, responseMarshaller.shapes.get(i), "Response " + i);
+                assertEquals(sent.get(i).getSerializedSize(), copied, "Response " + i);
+            }
+        }
+        assertTrue(inPlace > sent.size() / 2, inPlace + " of " + sent.size() + " responses were parsed in place");
     }
 
     private GrpcPayload echo(GrpcPayload request) {
@@ -219,9 +232,11 @@ public class GrpcNettyTransportTest {
         }
 
         private static String shapeOf(InputStream stream) {
-            if (!(stream instanceof KnownLength && stream instanceof HasByteBuffer
-                    && ((HasByteBuffer) stream).byteBufferSupported())) {
+            if (!(stream instanceof KnownLength && stream instanceof HasByteBuffer)) {
                 return stream.getClass().getName();
+            }
+            if (!((HasByteBuffer) stream).byteBufferSupported()) {
+                return MERGED_BUFFERS;
             }
             try {
                 ByteBuffer first = ((HasByteBuffer) stream).getByteBuffer();
