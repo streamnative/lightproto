@@ -25,6 +25,8 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void declaration(PrintWriter w) {
+        // The value is the array _xArray, the ByteBuf x, or _xLen bytes of the parsed buffer from _xIdx
+        w.format("private byte[] _%sArray = null;\n", ccName);
         w.format("private io.netty.buffer.ByteBuf %s = null;\n", ccName);
         w.format("private int _%sIdx = -1;\n", ccName);
         w.format("private int _%sLen = -1;\n", ccName);
@@ -34,6 +36,7 @@ public class LightProtoBytesField extends LightProtoField {
     public void parse(PrintWriter w) {
         // Invalidate any stale buffer reference from a previous parse or set: clear()
         // no longer resets it, so it must be dropped when the field is on the wire.
+        w.format("_%sArray = null;\n", ccName);
         w.format("%s = null;\n", ccName);
         w.format("_%sLen = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sIdx = _buffer.readerIndex();\n", ccName);
@@ -49,12 +52,18 @@ public class LightProtoBytesField extends LightProtoField {
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Set the {@code %s} field from a byte array. */\n", field.getName());
         w.format("public %s %s(byte[] %s) {\n", enclosingType, Util.camelCase("set", ccName), ccName);
-        w.format("    %s(io.netty.buffer.Unpooled.wrappedBuffer(%s));\n", Util.camelCase("set", ccName), ccName);
+        w.format("    this._%sArray = %s;\n", ccName, ccName);
+        w.format("    this.%s = null;\n", ccName);
+        writeSetPresence(w);
+        w.format("    _%sIdx = -1;\n", ccName);
+        w.format("    _%sLen = %s.length;\n", ccName, ccName);
+        w.format("    _cachedSize = -1;\n");
         w.format("    return this;\n");
         w.format("}\n");
 
         w.format("/** Set the {@code %s} field from a ByteBuf. */\n", field.getName());
         w.format("public %s %s(io.netty.buffer.ByteBuf %s) {\n", enclosingType, Util.camelCase("set", ccName), ccName);
+        w.format("    this._%sArray = null;\n", ccName);
         w.format("    this.%s = %s;\n", ccName, ccName);
         writeSetPresence(w);
         w.format("    _%sIdx = -1;\n", ccName);
@@ -82,6 +91,7 @@ public class LightProtoBytesField extends LightProtoField {
         w.format(" */\n");
         w.format("public byte[] %s() {\n", Util.camelCase("get", ccName));
         w.format("    if (!(%s)) { return new byte[0]; }\n", presenceCondition());
+        w.format("    if (_%sArray != null) { return _%sArray; }\n", ccName, ccName);
         w.format("    if (LightProtoCodec.isWholeArray(%s, _%sLen)) { return %s.array(); }\n", ccName, ccName, ccName);
         w.format("    io.netty.buffer.ByteBuf _b = %s();\n", Util.camelCase("get", ccName, "slice"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
@@ -92,6 +102,9 @@ public class LightProtoBytesField extends LightProtoField {
         w.format("/** Returns the {@code %s} field as a ByteBuf slice. */\n", field.getName());
         w.format("public io.netty.buffer.ByteBuf %s() {\n", Util.camelCase("get", ccName, "slice"));
         w.format("    if (!(%s)) { return io.netty.buffer.Unpooled.EMPTY_BUFFER; }\n", presenceCondition());
+        w.format("    if (_%sArray != null) {\n", ccName);
+        w.format("        return io.netty.buffer.Unpooled.wrappedBuffer(_%sArray);\n", ccName);
+        w.format("    }\n");
         w.format("    if (%s == null) {\n", ccName);
         w.format("        return _parsedBuffer.slice(_%sIdx, _%sLen);\n", ccName, ccName);
         w.format("    } else {\n");
@@ -113,6 +126,7 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void clearRelease(PrintWriter w) {
+        w.format("_%sArray = null;\n", ccName);
         w.format("%s = null;\n", ccName);
     }
 
@@ -129,7 +143,9 @@ public class LightProtoBytesField extends LightProtoField {
 
     @Override
     public void serializeJson(PrintWriter w) {
-        w.format("if (_%sIdx == -1) {\n", ccName);
+        w.format("if (_%sArray != null) {\n", ccName);
+        w.format("    LightProtoCodec.writeJsonBase64(_b, io.netty.buffer.Unpooled.wrappedBuffer(_%sArray), 0, _%sLen);\n", ccName, ccName);
+        w.format("} else if (_%sIdx == -1) {\n", ccName);
         w.format("    LightProtoCodec.writeJsonBase64(_b, %s, %s.readerIndex(), _%sLen);\n", ccName, ccName, ccName);
         w.format("} else {\n");
         w.format("    LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _%sIdx, _%sLen);\n", ccName, ccName);
@@ -145,7 +161,9 @@ public class LightProtoBytesField extends LightProtoField {
     public void serializeTextFormat(PrintWriter w) {
         w.format("LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
         w.format("_sb.append(\"%s: \");\n", field.getName());
-        w.format("if (_%sIdx == -1) {\n", ccName);
+        w.format("if (_%sArray != null) {\n", ccName);
+        w.format("    LightProtoCodec.writeTextFormatBytes(_sb, io.netty.buffer.Unpooled.wrappedBuffer(_%sArray), 0, _%sLen);\n", ccName, ccName);
+        w.format("} else if (_%sIdx == -1) {\n", ccName);
         w.format("    LightProtoCodec.writeTextFormatBytes(_sb, %s, %s.readerIndex(), _%sLen);\n",
                 ccName, ccName, ccName);
         w.format("} else {\n");
@@ -164,7 +182,9 @@ public class LightProtoBytesField extends LightProtoField {
     public void serialize(PrintWriter w, WriteSink sink) {
         w.format("%s;\n", writeTagExpr(tagName(), sink));
         w.format("_i = LightProtoCodec.writeRawVarInt(%s, _i, _%sLen);\n", sink.var, ccName);
-        w.format("if (_%sIdx == -1) {\n", ccName);
+        w.format("if (_%sArray != null) {\n", ccName);
+        sink.copyBytes(w, "_" + ccName + "Array", "0", "_" + ccName + "Len");
+        w.format("} else if (_%sIdx == -1) {\n", ccName);
         // Use the absolute-indexed copy so we don't mutate the source buffer's
         // readerIndex; that allows the message to be re-serialized (e.g. on
         // gRPC retry) and lets two fields safely alias the same backing buffer.
@@ -180,9 +200,8 @@ public class LightProtoBytesField extends LightProtoField {
         // The presence guard is required: an absent field may hold a stale buffer
         // index from an earlier parse of a buffer that has since been released.
         w.format("if ((%s) && _%sIdx >= 0) {\n", presenceCondition(), ccName);
-        w.format("    byte[] _tmp = new byte[_%sLen];\n", ccName);
-        w.format("    _parsedBuffer.getBytes(_%sIdx, _tmp);\n", ccName);
-        w.format("    %s = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n", ccName);
+        w.format("    _%sArray = new byte[_%sLen];\n", ccName, ccName);
+        w.format("    _parsedBuffer.getBytes(_%sIdx, _%sArray);\n", ccName, ccName);
         w.format("    _%sIdx = -1;\n", ccName);
         w.format("}\n");
     }

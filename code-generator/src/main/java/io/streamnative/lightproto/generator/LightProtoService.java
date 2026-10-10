@@ -309,7 +309,9 @@ public class LightProtoService {
         w.println("            this.buf = CLOSED;");
         w.println("            this.remaining = 0;");
         w.println("            for (int k = 0; k < count; k++) {");
-        w.println("                bufs[k].release();");
+        w.println("                if (bufs[k] != null) {");
+        w.println("                    bufs[k].release();");
+        w.println("                }");
         w.println("                bufs[k] = null;");
         w.println("                arrays[k] = null;");
         w.println("            }");

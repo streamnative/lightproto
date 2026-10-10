@@ -621,6 +621,29 @@ class LightProtoCodec {
         return i + len;
     }
 
+    /** Copies len bytes of array src starting at srcIdx into the view at absolute index i; returns i + len. */
+    static int copyRawBytes(byte[] src, int srcIdx, java.nio.ByteBuffer nb, int i, int len) {
+        nb.put(i, src, srcIdx, len);
+        return i + len;
+    }
+
+    /**
+     * Copies {@code len} bytes of array {@code src} into the array at {@code i}, unless the
+     * current thread is gathering: then a large region is recorded by reference instead, and
+     * the cursor is not advanced.
+     */
+    static int copyRawBytes(byte[] src, int srcIdx, byte[] a, int i, int len) {
+        if (len >= GATHER_MIN) {
+            Gather g = GATHER.get();
+            if (g.active) {
+                g.add(i, src, srcIdx, len);
+                return i;
+            }
+        }
+        System.arraycopy(src, srcIdx, a, i, len);
+        return i + len;
+    }
+
     // The outbound gRPC marshaller writes a message into an array, which gRPC then copies into
     // its transport buffers. A bytes value at least this large is not copied into the array:
     // the stream writes it to the transport straight from the heap buffer holding it. For a
@@ -631,9 +654,10 @@ class LightProtoCodec {
     static final ThreadLocal<Gather> GATHER = ThreadLocal.withInitial(Gather::new);
 
     /**
-     * The regions of heap buffers that a gathering write left out of its array: region k is
-     * {@code len[k]} bytes of {@code arrays[k]} from {@code idx[k]}, belongs at array position
-     * {@code pos[k]}, and {@code bufs[k]} holds a reference to it.
+     * The regions of heap buffers and arrays that a gathering write left out of its array: region
+     * k is {@code len[k]} bytes of {@code arrays[k]} from {@code idx[k]}, belongs at array position
+     * {@code pos[k]}, and {@code bufs[k]} holds a reference to the buffer it is in, or is null for
+     * a region of a byte[] value.
      */
     static final class Gather {
         boolean active;
@@ -645,6 +669,14 @@ class LightProtoCodec {
         int[] len = new int[4];
 
         void add(int p, ByteBuf b, int i, int l) {
+            add(p, b.retain(), b.array(), b.arrayOffset() + i, l);
+        }
+
+        void add(int p, byte[] array, int i, int l) {
+            add(p, null, array, i, l);
+        }
+
+        private void add(int p, ByteBuf b, byte[] array, int i, int l) {
             if (count == pos.length) {
                 int n = count * 2;
                 pos = java.util.Arrays.copyOf(pos, n);
@@ -654,9 +686,9 @@ class LightProtoCodec {
                 len = java.util.Arrays.copyOf(len, n);
             }
             pos[count] = p;
-            bufs[count] = b.retain();
-            arrays[count] = b.array();
-            idx[count] = b.arrayOffset() + i;
+            bufs[count] = b;
+            arrays[count] = array;
+            idx[count] = i;
             len[count] = l;
             count++;
         }
@@ -664,7 +696,9 @@ class LightProtoCodec {
         /** Releases the regions gathered so far, after a write that failed. */
         void releaseAll() {
             for (int k = 0; k < count; k++) {
-                bufs[k].release();
+                if (bufs[k] != null) {
+                    bufs[k].release();
+                }
                 bufs[k] = null;
                 arrays[k] = null;
             }
@@ -768,7 +802,9 @@ class LightProtoCodec {
         int len;
     }
 
+    // A bytes value: a byte[] (a), a ByteBuf (b), or len bytes of the parsed buffer from idx
     static final class BytesHolder {
+        byte[] a;
         ByteBuf b;
         int idx;
         int len;
