@@ -38,6 +38,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     public void parse(PrintWriter w) {
         w.format("LightProtoCodec.BytesHolder _%sBh = _%sBytesHolder();\n", ccName, Util.camelCase("new", singularName));
         // The holder may be pooled from a previous parse: drop its stale buffer reference.
+        w.format("_%sBh.a = null;\n", ccName);
         w.format("_%sBh.b = null;\n", ccName);
         w.format("_%sBh.len = LightProtoCodec.readVarInt(_buffer);\n", ccName);
         w.format("_%sBh.idx = _buffer.readerIndex();\n", ccName);
@@ -73,6 +74,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
         w.format("    }\n");
         w.format("    LightProtoCodec.BytesHolder _bh = %s[idx];\n", pluralName);
+        w.format("    if (_bh.a != null) { return _bh.a; }\n");
         w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) { return _bh.b.array(); }\n");
         w.format("    io.netty.buffer.ByteBuf _b = %s(idx);\n", Util.camelCase("get", singularName, "slice", "at"));
         w.format("    byte[] res = new byte[_b.readableBytes()];\n");
@@ -86,6 +88,9 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("        throw new IndexOutOfBoundsException(\"Index \" + idx + \" is out of the list size (\" + _%sCount + \") for field '%s'\");\n", pluralName, field.getName());
         w.format("    }\n");
         w.format("    LightProtoCodec.BytesHolder _bh = %s[idx];\n", pluralName);
+        w.format("    if (_bh.a != null) {\n");
+        w.format("        return io.netty.buffer.Unpooled.wrappedBuffer(_bh.a);\n");
+        w.format("    }\n");
         w.format("    if (_bh.b == null) {\n");
         w.format("        return _parsedBuffer.slice(_bh.idx, _bh.len);\n");
         w.format("    } else {\n");
@@ -100,7 +105,9 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    %s;\n", writeTagExpr(tagName(), sink));
         w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _bh.len);\n", sink.var);
-        w.format("    if (_bh.idx == -1) {\n");
+        w.format("    if (_bh.a != null) {\n");
+        sink.copyBytes(w, "_bh.a", "0", "_bh.len");
+        w.format("    } else if (_bh.idx == -1) {\n");
         sink.copyBytes(w, "_bh.b", "_bh.b.readerIndex()", "_bh.len");
         w.format("    } else {\n");
         sink.copyBytes(w, "_parsedBuffer", "_bh.idx", "_bh.len");
@@ -114,7 +121,9 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    if (i > 0) { _b.writeByte(','); }\n");
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
-        w.format("    if (_bh.idx == -1) {\n");
+        w.format("    if (_bh.a != null) {\n");
+        w.format("        LightProtoCodec.writeJsonBase64(_b, io.netty.buffer.Unpooled.wrappedBuffer(_bh.a), 0, _bh.len);\n");
+        w.format("    } else if (_bh.idx == -1) {\n");
         w.format("        LightProtoCodec.writeJsonBase64(_b, _bh.b, _bh.b.readerIndex(), _bh.len);\n");
         w.format("    } else {\n");
         w.format("        LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _bh.idx, _bh.len);\n");
@@ -140,7 +149,9 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
         w.format("    _sb.append(\"%s: \");\n", field.getName());
-        w.format("    if (_bh.idx == -1) {\n");
+        w.format("    if (_bh.a != null) {\n");
+        w.format("        LightProtoCodec.writeTextFormatBytes(_sb, io.netty.buffer.Unpooled.wrappedBuffer(_bh.a), 0, _bh.len);\n");
+        w.format("    } else if (_bh.idx == -1) {\n");
         w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _bh.b, _bh.b.readerIndex(), _bh.len);\n");
         w.format("    } else {\n");
         w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _bh.idx, _bh.len);\n");
@@ -169,13 +180,19 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     public void setter(PrintWriter w, String enclosingType) {
         w.format("/** Adds a value to the {@code %s} list from a byte array. */\n", field.getName());
         w.format("public void %s(byte[] %s) {\n", Util.camelCase("add", singularName), singularName);
-        w.format("    %s(io.netty.buffer.Unpooled.wrappedBuffer(%s));\n", Util.camelCase("add", singularName), singularName);
+        w.format("    LightProtoCodec.BytesHolder _bh = _%sBytesHolder();\n", Util.camelCase("new", singularName));
+        w.format("    _cachedSize = -1;\n");
+        w.format("    _bh.a = %s;\n", singularName);
+        w.format("    _bh.b = null;\n");
+        w.format("    _bh.idx = -1;\n");
+        w.format("    _bh.len = %s.length;\n", singularName);
         w.format("}\n");
 
         w.format("/** Adds a value to the {@code %s} list from a ByteBuf. */\n", field.getName());
         w.format("public void %s(io.netty.buffer.ByteBuf %s) {\n", Util.camelCase("add", singularName), singularName);
         w.format("    LightProtoCodec.BytesHolder _bh = _%sBytesHolder();\n", Util.camelCase("new", singularName));
         w.format("    _cachedSize = -1;\n");
+        w.format("    _bh.a = null;\n");
         w.format("    _bh.b = %s;\n", singularName);
         w.format("    _bh.idx = -1;\n");
         w.format("    _bh.len = %s.readableBytes();\n", singularName);
@@ -225,6 +242,7 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
     @Override
     public void clearRelease(PrintWriter w) {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
+        w.format("    %s[i].a = null;\n", pluralName);
         w.format("    %s[i].b = null;\n", pluralName);
         w.format("}\n");
         w.format("_%sCount = 0;\n", pluralName);
@@ -240,9 +258,8 @@ public class LightProtoRepeatedBytesField extends LightProtoAbstractRepeated {
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    LightProtoCodec.BytesHolder _bh = %s[i];\n", pluralName);
         w.format("    if (_bh.b == null && _bh.idx >= 0) {\n");
-        w.format("        byte[] _tmp = new byte[_bh.len];\n");
-        w.format("        _parsedBuffer.getBytes(_bh.idx, _tmp);\n");
-        w.format("        _bh.b = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n");
+        w.format("        _bh.a = new byte[_bh.len];\n");
+        w.format("        _parsedBuffer.getBytes(_bh.idx, _bh.a);\n");
         w.format("        _bh.idx = -1;\n");
         w.format("    }\n");
         w.format("}\n");

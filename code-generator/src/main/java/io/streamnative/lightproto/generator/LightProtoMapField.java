@@ -190,6 +190,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    return _sh.s;\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _bh = _%sValues[%s];\n", ccName, idxVar);
+            w.format("    if (_bh.a != null) {\n");
+            w.format("        return _bh.a;\n");
+            w.format("    }\n");
             w.format("    if (LightProtoCodec.isWholeArray(_bh.b, _bh.len)) {\n");
             w.format("        return _bh.b.array();\n");
             w.format("    }\n");
@@ -229,7 +232,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isBytesValue()) {
             w.format("        LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxExpr);
             w.format("        byte[] %s;\n", varName);
-            w.format("        if (LightProtoCodec.isWholeArray(_vbh.b, _vbh.len)) {\n");
+            w.format("        if (_vbh.a != null) {\n");
+            w.format("            %s = _vbh.a;\n", varName);
+            w.format("        } else if (LightProtoCodec.isWholeArray(_vbh.b, _vbh.len)) {\n");
             w.format("            %s = _vbh.b.array();\n", varName);
             w.format("        } else if (_vbh.idx == -1) {\n");
             w.format("            %s = new byte[_vbh.len];\n", varName);
@@ -390,7 +395,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("            _vbh = new LightProtoCodec.BytesHolder();\n");
             w.format("            _%sValues[%s] = _vbh;\n", ccName, idxExpr);
             w.format("        }\n");
-            w.format("        _vbh.b = io.netty.buffer.Unpooled.wrappedBuffer(%s);\n", valueExpr);
+            w.format("        _vbh.a = %s;\n", valueExpr);
+            w.format("        _vbh.b = null;\n");
             w.format("        _vbh.idx = -1;\n");
             w.format("        _vbh.len = %s.length;\n", valueExpr);
         } else {
@@ -557,6 +563,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _%sValues[_%sCount] = _%sVbh;\n", ccName, ccName, ccName);
             w.format("}\n");
             // A missing value is held as an empty buffer (idx stays -1), like a put() one
+            w.format("_%sVbh.a = null;\n", ccName);
             w.format("_%sVbh.b = _%sValueFields != 0 ? null : io.netty.buffer.Unpooled.EMPTY_BUFFER;\n", ccName, ccName);
             w.format("_%sVbh.idx = _%sValueIdx;\n", ccName, ccName);
             w.format("_%sVbh.len = _%sValueLen;\n", ccName, ccName);
@@ -614,7 +621,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    LightProtoCodec.writeJsonString(_b, _vsh.s);\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
-            w.format("    if (_vbh.idx == -1) {\n");
+            w.format("    if (_vbh.a != null) {\n");
+            w.format("        LightProtoCodec.writeJsonBase64(_b, io.netty.buffer.Unpooled.wrappedBuffer(_vbh.a), 0, _vbh.len);\n");
+            w.format("    } else if (_vbh.idx == -1) {\n");
             w.format("        LightProtoCodec.writeJsonBase64(_b, _vbh.b, 0, _vbh.len);\n");
             w.format("    } else {\n");
             w.format("        LightProtoCodec.writeJsonBase64(_b, _parsedBuffer, _vbh.idx, _vbh.len);\n");
@@ -731,7 +740,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
                 w.format("    LightProtoCodec.writeTextFormatString(_sb, _vsh.s);\n");
             } else if (isBytesValue()) {
                 w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
-                w.format("    if (_vbh.idx == -1) {\n");
+                w.format("    if (_vbh.a != null) {\n");
+                w.format("        LightProtoCodec.writeTextFormatBytes(_sb, io.netty.buffer.Unpooled.wrappedBuffer(_vbh.a), 0, _vbh.len);\n");
+                w.format("    } else if (_vbh.idx == -1) {\n");
                 w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _vbh.b, 0, _vbh.len);\n");
                 w.format("    } else {\n");
                 w.format("        LightProtoCodec.writeTextFormatBytes(_sb, _parsedBuffer, _vbh.idx, _vbh.len);\n");
@@ -941,7 +952,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[%s];\n", ccName, idxVar);
             w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _vbh.len);\n", sink.var);
-            w.format("    if (_vbh.idx == -1) {\n");
+            w.format("    if (_vbh.a != null) {\n");
+            sink.copyBytes(w, "_vbh.a", "0", "_vbh.len");
+            w.format("    } else if (_vbh.idx == -1) {\n");
             sink.copyBytes(w, "_vbh.b", "_vbh.b.readerIndex()", "_vbh.len");
             w.format("    } else {\n");
             sink.copyBytes(w, "_parsedBuffer", "_vbh.idx", "_vbh.len");
@@ -1000,7 +1013,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _other._%sValues[_i];\n", ccName);
             w.format("    byte[] _val;\n");
-            w.format("    if (_vbh.idx == -1) {\n");
+            w.format("    if (_vbh.a != null) {\n");
+            w.format("        _val = java.util.Arrays.copyOf(_vbh.a, _vbh.len);\n");
+            w.format("    } else if (_vbh.idx == -1) {\n");
             w.format("        _val = new byte[_vbh.len];\n");
             w.format("        _vbh.b.getBytes(_vbh.b.readerIndex(), _val);\n");
             w.format("    } else {\n");
@@ -1038,6 +1053,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("}\n");
         } else if (isBytesValue()) {
             w.format("for (int i = 0; i < _%sCount; i++) {\n", ccName);
+            w.format("    _%sValues[i].a = null;\n", ccName);
             w.format("    _%sValues[i].b = null;\n", ccName);
             w.format("}\n");
         } else if (isMessageValue()) {
@@ -1078,9 +1094,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("for (int _i = 0; _i < _%sCount; _i++) {\n", ccName);
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
             w.format("    if (_vbh.b == null && _vbh.idx >= 0) {\n");
-            w.format("        byte[] _tmp = new byte[_vbh.len];\n");
-            w.format("        _parsedBuffer.getBytes(_vbh.idx, _tmp);\n");
-            w.format("        _vbh.b = io.netty.buffer.Unpooled.wrappedBuffer(_tmp);\n");
+            w.format("        _vbh.a = new byte[_vbh.len];\n");
+            w.format("        _parsedBuffer.getBytes(_vbh.idx, _vbh.a);\n");
             w.format("        _vbh.idx = -1;\n");
             w.format("    }\n");
             w.format("}\n");
@@ -1117,9 +1132,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    if (!java.util.Objects.equals(_vsh1.s, _vsh2.s)) return false;\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh1 = _%sValues[_i];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs1 = _vbh1.b != null ? _vbh1.b.slice(_vbh1.b.readerIndex(), _vbh1.len) : _parsedBuffer.slice(_vbh1.idx, _vbh1.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs1 = _vbh1.a != null ? io.netty.buffer.Unpooled.wrappedBuffer(_vbh1.a) : _vbh1.b != null ? _vbh1.b.slice(_vbh1.b.readerIndex(), _vbh1.len) : _parsedBuffer.slice(_vbh1.idx, _vbh1.len);\n");
             w.format("    LightProtoCodec.BytesHolder _vbh2 = _other._%sValues[_oIdx];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs2 = _vbh2.b != null ? _vbh2.b.slice(_vbh2.b.readerIndex(), _vbh2.len) : _other._parsedBuffer.slice(_vbh2.idx, _vbh2.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs2 = _vbh2.a != null ? io.netty.buffer.Unpooled.wrappedBuffer(_vbh2.a) : _vbh2.b != null ? _vbh2.b.slice(_vbh2.b.readerIndex(), _vbh2.len) : _other._parsedBuffer.slice(_vbh2.idx, _vbh2.len);\n");
             w.format("    if (!io.netty.buffer.ByteBufUtil.equals(_bs1, _bs2)) return false;\n");
         } else if (isMessageValue()) {
             w.format("    if (!_%sValues[_i].equals(_other._%sValues[_oIdx])) return false;\n", ccName, ccName);
@@ -1171,7 +1186,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _eH = 31 * _eH + _vsh.s.hashCode();\n");
         } else if (isBytesValue()) {
             w.format("    LightProtoCodec.BytesHolder _vbh = _%sValues[_i];\n", ccName);
-            w.format("    io.netty.buffer.ByteBuf _bs = _vbh.b != null ? _vbh.b.slice(_vbh.b.readerIndex(), _vbh.len) : _parsedBuffer.slice(_vbh.idx, _vbh.len);\n");
+            w.format("    io.netty.buffer.ByteBuf _bs = _vbh.a != null ? io.netty.buffer.Unpooled.wrappedBuffer(_vbh.a) : _vbh.b != null ? _vbh.b.slice(_vbh.b.readerIndex(), _vbh.len) : _parsedBuffer.slice(_vbh.idx, _vbh.len);\n");
             w.format("    _eH = 31 * _eH + io.netty.buffer.ByteBufUtil.hashCode(_bs);\n");
         } else if (isMessageValue()) {
             w.format("    _eH = 31 * _eH + _%sValues[_i].hashCode();\n", ccName);

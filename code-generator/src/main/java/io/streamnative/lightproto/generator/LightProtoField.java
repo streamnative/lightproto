@@ -194,7 +194,7 @@ public abstract class LightProtoField {
         }
 
         /**
-         * Emits a copy of {@code len} bytes of ByteBuf {@code src} from {@code srcIdx} to the cursor, advancing it.
+         * Emits a copy of {@code len} bytes of ByteBuf or byte[] {@code src} from {@code srcIdx} to the cursor, advancing it.
          * Within the gRPC marshaller's stream(), a large array copy is gathered instead, without advancing the cursor.
          */
         void copyBytes(PrintWriter w, String src, String srcIdx, String len) {
