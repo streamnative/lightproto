@@ -65,9 +65,19 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
         }
     }
 
+    /** The type of the elements of the backing array: the field's Java type, or the number of an open enum. */
+    protected String elementType() {
+        return field.getJavaType();
+    }
+
+    /** The method that parsing adds each element with. */
+    protected String parseAddMethod() {
+        return Util.camelCase("add", singularName);
+    }
+
     @Override
     public void declaration(PrintWriter w) {
-        w.format("private %s[] %s = null;\n", field.getJavaType(), pluralName);
+        w.format("private %s[] %s = null;\n", elementType(), pluralName);
         w.format("private int _%sCount = 0;\n", pluralName);
         if (cachesPackedSize()) {
             w.format("private int _%sPackedSize = -1;\n", pluralName);
@@ -78,7 +88,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     public void parse(PrintWriter w) {
         resetPackedSize(w);
         LightProtoNumberField.parseNumberInto(w, field, "_" + ccName,
-                Util.camelCase("add", singularName) + "(%s);");
+                parseAddMethod() + "(%s);");
     }
 
     public void parsePacked(PrintWriter w) {
@@ -87,7 +97,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
         w.format("int _%s = _buffer.readerIndex() + _%s;\n", Util.camelCase(singularName, "endIdx"), Util.camelCase(singularName, "size"));
         w.format("while (_buffer.readerIndex() < _%s) {\n", Util.camelCase(singularName, "endIdx"));
         LightProtoNumberField.parseNumberInto(w, field, "_" + ccName + "Packed",
-                Util.camelCase("add", singularName) + "(%s);");
+                parseAddMethod() + "(%s);");
         w.format("}\n");
     }
 
@@ -119,7 +129,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
                 w.format("    if (_%sSize < 0) {\n", pluralName);
                 w.format("        _%sSize = 0;\n", pluralName);
                 w.format("        for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-                w.format("            %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("            %s _item = %s[i];\n", elementType(), pluralName);
                 w.format("            _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
                 w.format("        }\n");
                 w.format("        _%sPackedSize = _%sSize;\n", pluralName, pluralName);
@@ -127,12 +137,12 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
                 w.format("    _i = LightProtoCodec.writeRawVarInt(%s, _i, _%sSize);\n", sink.var, pluralName);
             }
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+            w.format("    %s _item = %s[i];\n", elementType(), pluralName);
             LightProtoNumberField.serializeNumber(w, field, "_item", sink);
             w.format("}\n");
         } else {
             w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-            w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+            w.format("    %s _item = %s[i];\n", elementType(), pluralName);
             w.format("    %s;\n", writeTagExpr(tagName(), sink));
             LightProtoNumberField.serializeNumber(w, field, "_item", sink);
             w.format("}\n");
@@ -144,7 +154,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
         w.format("_b.writeByte('[');\n");
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
         w.format("    if (i > 0) { _b.writeByte(','); }\n");
-        w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+        w.format("    %s _item = %s[i];\n", elementType(), pluralName);
         String type = field.getProtoType();
         if (field.isEnumField()) {
             w.format("    _b.writeByte('\"');\n");
@@ -198,7 +208,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
     public void serializeTextFormat(PrintWriter w) {
         String type = field.getProtoType();
         w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-        w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+        w.format("    %s _item = %s[i];\n", elementType(), pluralName);
         w.format("    LightProtoCodec.writeTextFormatIndent(_sb, _indent);\n");
         w.format("    _sb.append(\"%s: \");\n", field.getName());
         if (type.equals("bool")) {
@@ -254,7 +264,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
         w.format("/** Adds a value to the {@code %s} list. */\n", field.getName());
         w.format("public void %s(%s %s) {\n", Util.camelCase("add", singularName), field.getJavaType(), singularName);
         w.format("    if (%s == null) {\n", pluralName);
-        w.format("        %s = new %s[4];\n", pluralName, field.getJavaType());
+        w.format("        %s = new %s[4];\n", pluralName, elementType());
         w.format("    }\n");
         w.format("    if (%s.length == _%sCount) {\n", pluralName, pluralName);
         w.format("        %s = java.util.Arrays.copyOf(%s, _%sCount * 2);\n", pluralName, pluralName, pluralName);
@@ -281,7 +291,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
             } else {
                 w.format("    int _%sSize = 0;\n", pluralName);
                 w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    %s _item = %s[i];\n", elementType(), pluralName);
                 w.format("    _%sSize += %s;\n", pluralName, LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
                 w.format("}\n");
                 w.format("    _%sPackedSize = _%sSize;\n", pluralName, pluralName);
@@ -294,7 +304,7 @@ public class LightProtoRepeatedNumberField extends LightProtoAbstractRepeated {
                 w.format("_size += _%sCount * %s_TOTAL_SIZE;\n", pluralName, tagName());
             } else {
                 w.format("for (int i = 0; i < _%sCount; i++) {\n", pluralName);
-                w.format("    %s _item = %s[i];\n", field.getJavaType(), pluralName);
+                w.format("    %s _item = %s[i];\n", elementType(), pluralName);
                 w.format("    _size += %s_SIZE;\n", tagName());
                 w.format("    _size += %s;\n", LightProtoNumberField.serializedSizeOfNumber(field, "_item"));
                 w.format("}\n");

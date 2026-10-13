@@ -51,8 +51,18 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         return valueField.isMessageField();
     }
 
+    /** A closed enum value. An open enum value is held as its number, and stored and written like an int32. */
     private boolean isEnumValue() {
-        return valueField.isEnumField();
+        return valueField.isEnumField() && !valueField.isOpenEnum();
+    }
+
+    private boolean isOpenEnumValue() {
+        return valueField.isOpenEnum();
+    }
+
+    /** The private put of an open enum value's number. */
+    private String putValueMethod() {
+        return "_" + Util.camelCase("put", ccName, "value");
     }
 
     private String keyArrayType() {
@@ -69,6 +79,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             return "LightProtoCodec.BytesHolder[]";
         } else if (isMessageValue()) {
             return valueField.getJavaType() + "[]";
+        } else if (isOpenEnumValue()) {
+            return "int[]";
         }
         return valueField.getJavaType() + "[]";
     }
@@ -138,7 +150,21 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
 
         // get(key) - returns value, throws if not found
         String valueReturnType = isBytesValue() ? "byte[]" : valueField.getJavaType();
-        if (isBytesValue()) {
+        String getName = Util.camelCase("get", ccName);
+        if (isOpenEnumValue()) {
+            // get(key) maps the number that getValue(key), below, finds
+            String valueGetter = Util.camelCase("get", ccName, "value");
+            w.format("/**\n");
+            w.format(" * Returns the value for the given key in the {@code %s} map, or {@code UNRECOGNIZED} for a\n", field.getName());
+            w.format(" * number the enum doesn't define: {@link #%s} returns the number.\n", valueGetter);
+            w.format(" */\n");
+            w.format("public %s %s(%s key) {\n", valueField.getJavaType(), getName, keyField.getJavaType());
+            LightProtoOpenEnumField.returnEnum(w, valueField.getJavaType(), valueGetter + "(key)");
+            w.format("}\n");
+            w.format("/** Returns the number of the value for the given key in the {@code %s} map, which the enum may not define. */\n", field.getName());
+            valueReturnType = "int";
+            getName = valueGetter;
+        } else if (isBytesValue()) {
             String put = Util.camelCase("put", ccName);
             w.format("/**\n");
             w.format(" * Returns the value for the given key in the {@code %s} map.\n", field.getName());
@@ -150,7 +176,7 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else {
             w.format("/** Returns the value for the given key in the {@code %s} map. */\n", field.getName());
         }
-        w.format("public %s %s(%s key) {\n", valueReturnType, Util.camelCase("get", ccName), keyField.getJavaType());
+        w.format("public %s %s(%s key) {\n", valueReturnType, getName, keyField.getJavaType());
         w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
         w.format("    if (_idx < 0) {\n");
         w.format("        throw new IllegalArgumentException(\"Key not found in map field '%s'\");\n", field.getName());
@@ -243,6 +269,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("            %s = new byte[_vbh.len];\n", varName);
             w.format("            _parsedBuffer.getBytes(_vbh.idx, %s);\n", varName);
             w.format("        }\n");
+        } else if (isOpenEnumValue()) {
+            LightProtoOpenEnumField.declareEnum(w, valueField.getJavaType(), varName,
+                    String.format("_%sValues[%s]", ccName, idxExpr));
         } else {
             w.format("        %s %s = _%sValues[%s];\n", valueBoxed(), varName, ccName, idxExpr);
         }
@@ -315,6 +344,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             return String.format("LightProtoCodec.BytesHolder[%s]", size);
         } else if (isMessageValue()) {
             return String.format("%s[%s]", valueField.getJavaType(), size);
+        } else if (isOpenEnumValue()) {
+            return String.format("int[%s]", size);
         }
         return String.format("%s[%s]", valueField.getJavaType(), size);
     }
@@ -345,9 +376,19 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else {
             // put(key, value) -> void
             String valueParamType = isBytesValue() ? "byte[]" : valueField.getJavaType();
+            String putMethod = "public void " + Util.camelCase("put", ccName);
             w.format("/** Puts an entry in the {@code %s} map. */\n", field.getName());
-            w.format("public void %s(%s key, %s value) {\n",
-                    Util.camelCase("put", ccName), keyField.getJavaType(), valueParamType);
+            if (isOpenEnumValue()) {
+                // put(key, value) stores the number with a private put, which parsers and copyFrom() use
+                w.format("public void %s(%s key, %s value) {\n",
+                        Util.camelCase("put", ccName), keyField.getJavaType(), valueField.getJavaType());
+                // getValue() throws for UNRECOGNIZED, which has no number to write
+                w.format("    %s(key, value.getValue());\n", putValueMethod());
+                w.format("}\n");
+                putMethod = "private void " + putValueMethod();
+                valueParamType = "int";
+            }
+            w.format("%s(%s key, %s value) {\n", putMethod, keyField.getJavaType(), valueParamType);
             w.format("    int _idx = _find%sKeyIndex(key);\n", Util.camelCaseFirstUpper(ccName));
             w.format("    if (_idx >= 0) {\n");
             generateStoreValueAtIdx(w, "value", "_idx");
@@ -493,7 +534,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         } else if (isMessageValue()) {
             // Message value: no temp needed, will be parsed directly
         } else {
-            w.format("%s _%sValue = %s;\n", valueField.getJavaType(), ccName, defaultForType(valueField));
+            w.format("%s _%sValue = %s;\n", isOpenEnumValue() ? "int" : valueField.getJavaType(), ccName,
+                    defaultForType(valueField));
         }
     }
 
@@ -579,8 +621,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
         if (f.getJavaType().equals("long")) return "0L";
         if (f.getJavaType().equals("float")) return "0.0f";
         if (f.getJavaType().equals("double")) return "0.0";
-        // Same implicit default as a singular enum field (LightProtoEnumField)
-        if (f.isEnumField()) return String.format("%s.valueOf(0)", f.getJavaType());
+        // Same implicit default as a singular enum field (LightProtoEnumField); an open enum is
+        // held as the number, 0
+        if (f.isEnumField() && !f.isOpenEnum()) return String.format("%s.valueOf(0)", f.getJavaType());
         return "0";
     }
 
@@ -634,6 +677,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    _b.writeByte('\"');\n");
             w.format("    LightProtoCodec.writeJsonAscii(_b, _%sValues[_i].name());\n", ccName);
             w.format("    _b.writeByte('\"');\n");
+        } else if (isOpenEnumValue()) {
+            w.format("    %s\n", LightProtoOpenEnumField.writeJson(valueField.getJavaType(), "_" + ccName + "Values[_i]"));
         } else if (valueField.getProtoType().equals("bool")) {
             w.format("    LightProtoCodec.writeJsonAscii(_b, Boolean.toString(_%sValues[_i]));\n", ccName);
         } else if (valueField.getJavaType().equals("long")) {
@@ -681,6 +726,9 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("                        { %s _v = %s.valueOf(_r.readString());\n",
                     valueField.getJavaType(), valueField.getJavaType());
             w.format("                        if (_v != null) { %s(_key, _v); } }\n", Util.camelCase("put", ccName));
+        } else if (isOpenEnumValue()) {
+            w.format("                        %s(_key, %s);\n", putValueMethod(),
+                    LightProtoOpenEnumField.parseJsonNumber(valueField.getJavaType()));
         } else if (valueField.getProtoType().equals("bool")) {
             w.format("                        %s(_key, _r.readBool());\n", Util.camelCase("put", ccName));
         } else if (valueField.getProtoType().equals("float")) {
@@ -749,6 +797,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
                 w.format("    }\n");
             } else if (isEnumValue()) {
                 w.format("    _sb.append(_%sValues[_i].name());\n", ccName);
+            } else if (isOpenEnumValue()) {
+                w.format("    %s\n", LightProtoOpenEnumField.writeTextFormat(valueField.getJavaType(), "_" + ccName + "Values[_i]"));
             } else if (valueField.getProtoType().equals("bool")) {
                 w.format("    _sb.append(Boolean.toString(_%sValues[_i]));\n", ccName);
             } else if (valueField.getProtoType().equals("float")) {
@@ -838,6 +888,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
                 w.format("                      _val = _r.readBytes();\n");
             } else if (isEnumValue()) {
                 w.format("                      _val = %s.valueOf(_r.readIdentifier());\n", valueField.getJavaType());
+            } else if (isOpenEnumValue()) {
+                w.format("                      _val = %s;\n", LightProtoOpenEnumField.parseTextFormatNumber(valueField.getJavaType()));
             } else if (valueField.getProtoType().equals("bool")) {
                 w.format("                      _val = _r.readBool();\n");
             } else if (valueField.getProtoType().equals("float")) {
@@ -864,7 +916,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("                    _v.clear();\n");
             w.format("                    if (_msg != null) { _v.copyFrom(_msg); } }\n");
         } else {
-            w.format("                  %s(_key, _val);\n", Util.camelCase("put", ccName));
+            w.format("                  %s(_key, _val);\n",
+                    isOpenEnumValue() ? putValueMethod() : Util.camelCase("put", ccName));
         }
         w.format("                }\n");
     }
@@ -1024,7 +1077,8 @@ public class LightProtoMapField extends LightProtoAbstractRepeated {
             w.format("    }\n");
             w.format("    %s(_key, _val);\n", Util.camelCase("put", ccName));
         } else {
-            w.format("    %s(_key, _other._%sValues[_i]);\n", Util.camelCase("put", ccName), ccName);
+            w.format("    %s(_key, _other._%sValues[_i]);\n",
+                    isOpenEnumValue() ? putValueMethod() : Util.camelCase("put", ccName), ccName);
         }
 
         w.format("}\n");

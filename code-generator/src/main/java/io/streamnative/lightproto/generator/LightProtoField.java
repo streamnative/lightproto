@@ -38,6 +38,8 @@ public abstract class LightProtoField {
                 return new LightProtoRepeatedMessageField(field, index);
             } else if (field.isStringField()) {
                 return new LightProtoRepeatedStringField(field, index);
+            } else if (field.isOpenEnum()) {
+                return new LightProtoRepeatedOpenEnumField(field, index);
             } else if (field.isEnumField()) {
                 return new LightProtoRepeatedEnumField(field, index);
             } else if (field.isNumberField() || field.isBoolField()) {
@@ -51,6 +53,8 @@ public abstract class LightProtoField {
             return new LightProtoBytesField(field, index);
         } else if (field.isStringField()) {
             return new LightProtoStringField(field, index);
+        } else if (field.isOpenEnum()) {
+            return new LightProtoOpenEnumField(field, index);
         } else if (field.isEnumField()) {
             return new LightProtoEnumField(field, index);
         } else if (field.isNumberField()) {

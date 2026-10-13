@@ -49,7 +49,10 @@ public class LightProtoNumberField extends LightProtoField {
     static void serializeNumber(PrintWriter w, ProtoFieldDescriptor field, String name, WriteSink sink) {
         String writer;
         String value = name;
-        if (field.isEnumField()) {
+        if (field.isOpenEnum()) {
+            // Held as the number, written as an int32 is
+            writer = "writeRawVarInt";
+        } else if (field.isEnumField()) {
             writer = "writeRawVarInt";
             value = name + ".getValue()";
         } else if (field.getProtoType().equals("bool")) {
@@ -80,7 +83,9 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     static String parseNumber(ProtoFieldDescriptor field) {
-        if (field.isEnumField()) {
+        if (field.isOpenEnum()) {
+            return "LightProtoCodec.readVarInt(_buffer)";
+        } else if (field.isEnumField()) {
             return String.format("%s.valueOf(LightProtoCodec.readVarInt(_buffer))", field.getJavaType());
         } else if (field.getProtoType().equals("int32")) {
             return "LightProtoCodec.readVarInt(_buffer)";
@@ -133,7 +138,9 @@ public class LightProtoNumberField extends LightProtoField {
     }
 
     static String serializedSizeOfNumber(ProtoFieldDescriptor field, String name) {
-        if (field.isEnumField()) {
+        if (field.isOpenEnum()) {
+            return String.format("LightProtoCodec.computeVarIntSize(%s)", name);
+        } else if (field.isEnumField()) {
             return String.format("LightProtoCodec.computeVarIntSize(%s.getValue())", name);
         } else if (field.getProtoType().equals("sint32")) {
             return String.format("LightProtoCodec.computeSignedVarIntSize(%s)", name);

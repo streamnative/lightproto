@@ -55,6 +55,7 @@ public class ProtoFieldDescriptor {
     private final ProtoFieldDescriptor mapValueField;
     private final boolean proto3;
     private final boolean proto3Optional;
+    private final boolean openEnum;
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
                                 Label label, boolean packed,
@@ -84,7 +85,7 @@ public class ProtoFieldDescriptor {
         this(name, number, protoType, javaType, label, packed,
                 defaultValueSet, defaultValue, defaultValueAsString, doc,
                 oneofIndex, oneofName, mapField, mapKeyField, mapValueField,
-                false, false);
+                false, false, false);
     }
 
     public ProtoFieldDescriptor(String name, int number, String protoType, String javaType,
@@ -94,7 +95,7 @@ public class ProtoFieldDescriptor {
                                 int oneofIndex, String oneofName,
                                 boolean mapField, ProtoFieldDescriptor mapKeyField,
                                 ProtoFieldDescriptor mapValueField,
-                                boolean proto3, boolean proto3Optional) {
+                                boolean proto3, boolean proto3Optional, boolean openEnum) {
         this.name = name;
         this.number = number;
         this.protoType = protoType;
@@ -112,6 +113,7 @@ public class ProtoFieldDescriptor {
         this.mapValueField = mapValueField;
         this.proto3 = proto3;
         this.proto3Optional = proto3Optional;
+        this.openEnum = openEnum;
     }
 
     public String getName() {
@@ -148,6 +150,16 @@ public class ProtoFieldDescriptor {
 
     public boolean isEnumField() {
         return "enum".equals(protoType);
+    }
+
+    /**
+     * Whether this is an open enum field, which keeps a number its enum doesn't define: an enum
+     * field (or map value) of a proto3 file. Its value is stored as the number. Enum fields of
+     * proto2 files are closed, as protobuf-java treats them even when the enum is open: parsing
+     * drops a number the enum doesn't define.
+     */
+    public boolean isOpenEnum() {
+        return openEnum;
     }
 
     public boolean isBoolField() {

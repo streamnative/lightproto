@@ -109,7 +109,8 @@ public class DescriptorConverter {
 
         List<ProtoEnumDescriptor> enums = new ArrayList<>();
         for (int i = 0; i < fileProto.getEnumTypeCount(); i++) {
-            enums.add(convertEnum(fileProto.getEnumType(i), comments, new int[]{5, i}));
+            enums.add(convertEnum(fileProto.getEnumType(i), comments, new int[]{5, i},
+                    "proto3".equals(syntax)));
         }
 
         List<ProtoMessageDescriptor> messages = new ArrayList<>();
@@ -220,7 +221,7 @@ public class DescriptorConverter {
         List<ProtoEnumDescriptor> nestedEnums = new ArrayList<>();
         for (int i = 0; i < messageProto.getEnumTypeCount(); i++) {
             nestedEnums.add(convertEnum(messageProto.getEnumType(i), comments,
-                    appendPath(parentPath, 4, i)));
+                    appendPath(parentPath, 4, i), "proto3".equals(syntax)));
         }
 
         // Detect map_entry synthetic messages
@@ -380,7 +381,7 @@ public class DescriptorConverter {
             if (entryProto != null) {
                 isMapField = true;
                 for (FieldDescriptorProto entryField : entryProto.getFieldList()) {
-                    ProtoFieldDescriptor entryFieldDesc = convertSimpleField(entryField, resolver);
+                    ProtoFieldDescriptor entryFieldDesc = convertSimpleField(entryField, resolver, proto3);
                     if (entryField.getNumber() == 1) {
                         mapKeyField = entryFieldDesc;
                     } else if (entryField.getNumber() == 2) {
@@ -393,14 +394,15 @@ public class DescriptorConverter {
         return new ProtoFieldDescriptor(name, number, protoType, javaType, label, packed,
                 defaultValueSet, defaultValue, defaultValueAsString, doc,
                 oneofIndex, oneofName, isMapField, mapKeyField, mapValueField,
-                proto3, proto3Optional);
+                proto3, proto3Optional, proto3 && type == FieldDescriptorProto.Type.TYPE_ENUM);
     }
 
     /**
      * Converts a field descriptor to a simple ProtoFieldDescriptor (used for map key/value fields).
      */
     private static ProtoFieldDescriptor convertSimpleField(FieldDescriptorProto fieldProto,
-                                                           TypeResolver resolver) {
+                                                           TypeResolver resolver,
+                                                           boolean proto3) {
         FieldDescriptorProto.Type type = fieldProto.getType();
         String protoType = PROTO_TYPE_NAMES.get(type);
         String javaType;
@@ -411,12 +413,13 @@ public class DescriptorConverter {
         }
         return new ProtoFieldDescriptor(fieldProto.getName(), fieldProto.getNumber(),
                 protoType, javaType, ProtoFieldDescriptor.Label.OPTIONAL, false,
-                false, null, null, null);
+                false, null, null, null, -1, null, false, null, null,
+                false, false, proto3 && type == FieldDescriptorProto.Type.TYPE_ENUM);
     }
 
     private static ProtoEnumDescriptor convertEnum(EnumDescriptorProto enumProto,
                                                     Map<List<Integer>, String> comments,
-                                                    int[] parentPath) {
+                                                    int[] parentPath, boolean open) {
         String enumDoc = getDoc(comments, parentPath);
 
         List<ProtoEnumDescriptor.Value> values = new ArrayList<>();
@@ -434,7 +437,7 @@ public class DescriptorConverter {
         // Sort by number after adding docs
         values.sort(Comparator.comparingInt(ProtoEnumDescriptor.Value::getNumber));
 
-        return new ProtoEnumDescriptor(enumProto.getName(), values, enumDoc);
+        return new ProtoEnumDescriptor(enumProto.getName(), values, enumDoc, open);
     }
 
     private static ProtoServiceDescriptor convertService(ServiceDescriptorProto serviceProto,

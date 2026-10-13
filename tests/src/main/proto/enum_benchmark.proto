@@ -1,0 +1,24 @@
+syntax = "proto3";
+package io.streamnative.lightproto.tests;
+
+option java_outer_classname = "EnumBenchmarkProtos";
+
+// The statuses of operations, for EnumBenchmark.
+enum BenchmarkStatus {
+    BENCHMARK_OK = 0;
+    BENCHMARK_NOT_FOUND = 1;
+    BENCHMARK_BAD_VERSION = 2;
+    BENCHMARK_NO_SESSION = 3;
+}
+
+// The result of one operation of a batch, as in a key-value store's response.
+message BenchmarkResult {
+    BenchmarkStatus status = 1;
+    int64 version = 2;
+}
+
+// The results of a batch of operations, and their statuses alone in a packed list.
+message BenchmarkResults {
+    repeated BenchmarkResult results = 1;
+    repeated BenchmarkStatus status_codes = 2;
+}

@@ -1355,6 +1355,21 @@ class LightProtoCodec {
         b.writeCharSequence(s, java.nio.charset.StandardCharsets.US_ASCII);
     }
 
+    /**
+     * Writes the value of an open enum field as protobuf's JSON printer does: the name of
+     * {@code e}, the constant for {@code number}, or the number itself when the enum doesn't
+     * define it ({@code e} is null).
+     */
+    static void writeJsonEnum(ByteBuf b, Enum<?> e, int number) {
+        if (e != null) {
+            b.writeByte('"');
+            writeJsonAscii(b, e.name());
+            b.writeByte('"');
+        } else {
+            writeJsonAscii(b, Integer.toString(number));
+        }
+    }
+
     // ==================== JSON parsing utilities ====================
 
     /**
@@ -1706,6 +1721,18 @@ class LightProtoCodec {
         }
     }
 
+    /**
+     * Writes the value of an open enum field as protobuf's TextFormat printer does: the name of
+     * {@code e}, the constant for {@code number}, or the number when the enum doesn't define it.
+     */
+    static void writeTextFormatEnum(StringBuilder sb, Enum<?> e, int number) {
+        if (e != null) {
+            sb.append(e.name());
+        } else {
+            sb.append(number);
+        }
+    }
+
     // ==================== TextFormat parsing utilities ====================
 
     /**
@@ -1849,6 +1876,14 @@ class LightProtoCodec {
         boolean atArrayStart() {
             skipWhitespaceAndComments();
             return readable() > 0 && at(0) == '[';
+        }
+
+        /** True when the next value is a number: an enum value can be given by its number. */
+        boolean atNumber() {
+            skipWhitespaceAndComments();
+            if (readable() <= 0) return false;
+            byte b = at(0);
+            return b == '-' || b == '+' || (b >= '0' && b <= '9');
         }
 
         /** Read raw bytes of a quoted string (handles concatenation of adjacent strings). */

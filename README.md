@@ -141,8 +141,9 @@ parsed.parseFromJson(jsonBytes);
 ```
 
 The JSON encoding follows protobuf conventions: lowerCamelCase field names, int64 values quoted
-as strings, enum values as names, and bytes fields as base64. Unknown fields are silently ignored
-during parsing, ensuring forward compatibility.
+as strings, enum values as names (or as numbers, for numbers an open enum doesn't define), and
+bytes fields as base64. Unknown fields are silently ignored during parsing, ensuring forward
+compatibility.
 
 ### Protobuf TextFormat (opt-in)
 
@@ -172,7 +173,7 @@ parsed.parseFromTextFormat(text);
 ```
 
 Differences from JSON: field names are the original proto snake_case, `int64` values are
-**not** quoted, enum values are emitted as bare identifiers, and bytes are written as
+**not** quoted, enum values are emitted as bare identifiers (or numbers), and bytes are written as
 quoted strings with C-style escapes. The parser tolerates `# … ` comments, single- or
 double-quoted strings, angle-bracket sub-messages (`field <…>`), `[v1, v2]` array syntax for
 repeated fields, and ignores unknown fields.
@@ -248,6 +249,7 @@ client streaming, and bidirectional streaming.
 | String fields | ✅ | ✅ |
 | Bytes fields | ✅ | ✅ |
 | Enum fields | ✅ | ✅ |
+| Open enums: numbers the enum doesn't define are kept (`UNRECOGNIZED`, `get*Value()`) | — | ✅ |
 | Nested messages | ✅ | ✅ |
 | `optional` fields (explicit presence) | ✅ | ✅ |
 | `required` fields | ✅ | — |

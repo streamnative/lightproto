@@ -21,15 +21,21 @@ public class ProtoEnumDescriptor {
     private final String name;
     private final List<Value> values;
     private final String doc;
+    private final boolean open;
 
     public ProtoEnumDescriptor(String name, List<Value> values) {
         this(name, values, null);
     }
 
     public ProtoEnumDescriptor(String name, List<Value> values, String doc) {
+        this(name, values, doc, false);
+    }
+
+    public ProtoEnumDescriptor(String name, List<Value> values, String doc, boolean open) {
         this.name = name;
         this.values = values;
         this.doc = doc;
+        this.open = open;
     }
 
     public String getName() {
@@ -42,6 +48,14 @@ public class ProtoEnumDescriptor {
 
     public String getDoc() {
         return doc;
+    }
+
+    /**
+     * Whether the enum is open, as an enum declared in a proto3 file is: its fields can hold
+     * numbers it doesn't define, which its {@code UNRECOGNIZED} constant stands for.
+     */
+    public boolean isOpen() {
+        return open;
     }
 
     public static class Value {

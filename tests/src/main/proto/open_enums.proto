@@ -1,0 +1,52 @@
+syntax = "proto3";
+package io.streamnative.lightproto.tests;
+
+option java_outer_classname = "OpenEnumsProtos";
+
+// The enums of a proto3 file are open: their fields keep the numbers they don't
+// define, like those of values that a newer version of the enum adds.
+enum OpenEnum {
+    OPEN_ZERO = 0;
+    OPEN_ONE = 1;
+    OPEN_TWO = 2;
+    // The number of UNRECOGNIZED in protobuf-java, which never serializes it
+    OPEN_MINUS_ONE = -1;
+}
+
+// Numbers with a gap, as a removed value leaves.
+enum GappedOpenEnum {
+    GAPPED_ZERO = 0;
+    GAPPED_TWO = 2;
+    GAPPED_THREE = 3;
+}
+
+// Numbers too sparse to look up in an array.
+enum SparseOpenEnum {
+    SPARSE_ZERO = 0;
+    SPARSE_THOUSAND = 1000;
+}
+
+// Every kind of field of an open enum.
+message OpenEnumMessage {
+    enum NestedEnum {
+        NESTED_ZERO = 0;
+        NESTED_ONE = 1;
+    }
+
+    OpenEnum implicit_enum = 1;
+    optional OpenEnum optional_enum = 2;
+    oneof choice {
+        OpenEnum oneof_enum = 3;
+        string oneof_string = 4;
+    }
+    repeated OpenEnum packed_enums = 5;
+    repeated OpenEnum unpacked_enums = 6 [packed = false];
+    map<string, OpenEnum> enum_map = 7;
+    NestedEnum nested_enum = 8;
+}
+
+// An open enum field in a message nested in another one.
+message OpenEnumHolder {
+    OpenEnumMessage message = 1;
+    repeated OpenEnumMessage messages = 2;
+}

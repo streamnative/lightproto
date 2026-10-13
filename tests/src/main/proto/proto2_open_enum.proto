@@ -1,0 +1,16 @@
+syntax = "proto2";
+package io.streamnative.lightproto.tests;
+
+import "open_enums.proto";
+
+option java_outer_classname = "Proto2OpenEnumProtos";
+
+// A proto2 message with fields of an open enum: protobuf-java treats them as
+// closed, as the fields of proto2 files are, and drops a number the enum doesn't
+// define.
+message Proto2OpenEnumMessage {
+    optional OpenEnum optional_enum = 1;
+    repeated OpenEnum unpacked_enums = 2;
+    repeated OpenEnum packed_enums = 3 [packed = true];
+    map<string, OpenEnum> enum_map = 4;
+}
