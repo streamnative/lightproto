@@ -66,38 +66,44 @@ class LightProtoCodec {
         MethodHandle mhPutObject = null;
         MethodHandle mhCopyMemory = null;
         MethodHandle mhAllocateInstance = null;
-        try {
-            Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
-            Field f = unsafeClass.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            Object unsafe = f.get(null);
+        // Only where Netty uses sun.misc.Unsafe too: since JDK 24 the JVM prints a warning on
+        // the first call to one of its memory-access methods (JEP 498), once, and Netty's own
+        // calls have printed it already. Where Netty doesn't (by default from Netty 4.2 on
+        // Java 25), the paths without Unsafe below are taken, and no warning is printed.
+        if (PlatformDependent.hasUnsafe()) {
+            try {
+                Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");
+                Field f = unsafeClass.getDeclaredField("theUnsafe");
+                f.setAccessible(true);
+                Object unsafe = f.get(null);
 
-            // Use reflection for init-only operations
-            Method objectFieldOffset = unsafeClass.getMethod("objectFieldOffset", Field.class);
-            Method arrayBaseOffsetMethod = unsafeClass.getMethod("arrayBaseOffset", Class.class);
-            Method getObjectMethod = unsafeClass.getMethod("getObject", Object.class, long.class);
+                // Use reflection for init-only operations
+                Method objectFieldOffset = unsafeClass.getMethod("objectFieldOffset", Field.class);
+                Method arrayBaseOffsetMethod = unsafeClass.getMethod("arrayBaseOffset", Class.class);
+                Method getObjectMethod = unsafeClass.getMethod("getObject", Object.class, long.class);
 
-            offset = (long) objectFieldOffset.invoke(unsafe, String.class.getDeclaredField("value"));
-            arrayBase = (int) arrayBaseOffsetMethod.invoke(unsafe, byte[].class);
-            // Detect compact strings: an ASCII string's internal byte[] length
-            // equals the string length when compact strings are enabled (LATIN1 coder),
-            // but is 2x the string length when disabled (UTF-16 coder).
-            byte[] testValue = (byte[]) getObjectMethod.invoke(unsafe, "a", offset);
-            compactStrings = (testValue.length == 1);
+                offset = (long) objectFieldOffset.invoke(unsafe, String.class.getDeclaredField("value"));
+                arrayBase = (int) arrayBaseOffsetMethod.invoke(unsafe, byte[].class);
+                // Detect compact strings: an ASCII string's internal byte[] length
+                // equals the string length when compact strings are enabled (LATIN1 coder),
+                // but is 2x the string length when disabled (UTF-16 coder).
+                byte[] testValue = (byte[]) getObjectMethod.invoke(unsafe, "a", offset);
+                compactStrings = (testValue.length == 1);
 
-            // Create MethodHandles for hot-path operations, bound to the Unsafe instance
-            MethodHandles.Lookup lookup = MethodHandles.lookup();
-            mhGetObject = lookup.unreflect(getObjectMethod).bindTo(unsafe);
-            mhPutObject = lookup.unreflect(
-                    unsafeClass.getMethod("putObject", Object.class, long.class, Object.class)).bindTo(unsafe);
-            mhCopyMemory = lookup.unreflect(
-                    unsafeClass.getMethod("copyMemory", Object.class, long.class, Object.class, long.class, long.class))
-                    .bindTo(unsafe);
-            mhAllocateInstance = lookup.unreflect(
-                    unsafeClass.getMethod("allocateInstance", Class.class)).bindTo(unsafe);
-            hasUnsafe = true;
-        } catch (Throwable ignore) {
-            // Fallback to non-Unsafe path
+                // Create MethodHandles for hot-path operations, bound to the Unsafe instance
+                MethodHandles.Lookup lookup = MethodHandles.lookup();
+                mhGetObject = lookup.unreflect(getObjectMethod).bindTo(unsafe);
+                mhPutObject = lookup.unreflect(
+                        unsafeClass.getMethod("putObject", Object.class, long.class, Object.class)).bindTo(unsafe);
+                mhCopyMemory = lookup.unreflect(
+                        unsafeClass.getMethod("copyMemory", Object.class, long.class, Object.class, long.class, long.class))
+                        .bindTo(unsafe);
+                mhAllocateInstance = lookup.unreflect(
+                        unsafeClass.getMethod("allocateInstance", Class.class)).bindTo(unsafe);
+                hasUnsafe = true;
+            } catch (Throwable ignore) {
+                // Fallback to non-Unsafe path
+            }
         }
         HAS_UNSAFE = hasUnsafe;
         STRING_VALUE_OFFSET = offset;
@@ -483,6 +489,7 @@ class LightProtoCodec {
      * at index i. ASCII strings are copied straight from the String's internal
      * byte[]; other strings go through the JDK encoder. Returns the index after.
      */
+    @SuppressWarnings("deprecation")
     static int writeRawString(byte[] a, int i, String s, int bytesCount) {
         if (s.length() == bytesCount) {
             // ASCII fast path: copy the String's internal LATIN1 byte[] directly
@@ -494,7 +501,9 @@ class LightProtoCodec {
                     throw new RuntimeException(t);
                 }
             } else {
-                System.arraycopy(s.getBytes(StandardCharsets.ISO_8859_1), 0, a, i, bytesCount);
+                // Stores the low byte of each char: for a LATIN1 string, one arraycopy of its
+                // internal byte[], without the temporary array of getBytes(ISO_8859_1)
+                s.getBytes(0, bytesCount, a, i);
             }
         } else {
             System.arraycopy(s.getBytes(StandardCharsets.UTF_8), 0, a, i, bytesCount);
@@ -584,7 +593,11 @@ class LightProtoCodec {
                     throw new RuntimeException(t);
                 }
             } else {
-                nb.put(i, s.getBytes(StandardCharsets.ISO_8859_1), 0, bytesCount);
+                // One put per char, without a temporary array: faster than staging the bytes
+                // in one, at any length
+                for (int k = 0; k < bytesCount; k++) {
+                    nb.put(i + k, (byte) s.charAt(k));
+                }
             }
         } else {
             nb.put(i, s.getBytes(StandardCharsets.UTF_8), 0, bytesCount);

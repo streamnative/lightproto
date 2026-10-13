@@ -125,10 +125,6 @@ public class NioWriteTest {
 
     @Test
     public void testAllocationFreeLargeWritesTopicList() throws Exception {
-        // With -XX:-CompactStrings the ASCII fast path cannot bulk-put the String's
-        // internal byte[] and copies each string through a temporary array.
-        assumeTrue(!ManagementFactory.getRuntimeMXBean().getInputArguments().contains("-XX:-CompactStrings"));
-
         List<String> topics = new ArrayList<>();
         String base = "persistent://public/default/" + "t".repeat(520) + "-";
         for (int i = 0; i < 8192; i++) {

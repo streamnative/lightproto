@@ -9,7 +9,7 @@ High-performance Protocol Buffers code generator for Java, optimized for seriali
 - **Zero-copy deserialization** using Netty `ByteBuf` (direct and heap memory)
 - **Zero heap allocations** — reusable mutable objects, no Builder pattern overhead
 - **Lazy string/bytes deserialization** — decoded only on access
-- **Optimized string handling** — single-copy ASCII fast path via `sun.misc.Unsafe`
+- **Optimized string handling** — single-copy ASCII fast path via `sun.misc.Unsafe`, used only when Netty uses it too
 - **Protobuf-compatible JSON serialization and deserialization** — `toJson()` / `parseFromJson()` methods
 - **Protobuf TextFormat (de)serialization** — opt-in `toTextFormat()` / `parseFromTextFormat()` for compatibility with `com.google.protobuf.TextFormat`
 - **No runtime dependencies** — generated code is self-contained
