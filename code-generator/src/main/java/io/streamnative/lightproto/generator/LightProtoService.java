@@ -136,13 +136,14 @@ public class LightProtoService {
 
     private void generateDrainableByteArrayInputStream(PrintWriter w) {
         // Each thread reuses one array for its outbound messages: stream() takes the thread's
-        // array, and closing the stream hands it back. Over Netty, gRPC drains and closes the
-        // stream inside writeMessage(), on the sending thread, so steady-state sends allocate no
-        // array. The array is not reference counted: a stream that is never closed only leaves
-        // it to the garbage collector (GatheringInputStream also retains the buffers of the large
-        // values it writes). Arrays above SPARE_ARRAY_MAX, gRPC's default maximum
-        // inbound message size, are not kept, so outlier messages don't pin larger allocations
-        // on every thread that sent one.
+        // array, and closing the stream once it has been read to the end hands it back. Over
+        // Netty, gRPC drains and closes the stream inside writeMessage(), on the sending thread,
+        // so steady-state sends allocate no array. The array is not reference counted: a stream
+        // that is never closed, or is closed before it was read, only leaves it to the garbage
+        // collector (GatheringInputStream also retains the buffers of the large values it
+        // writes). Arrays above SPARE_ARRAY_MAX, gRPC's default maximum inbound message size,
+        // are not kept, so outlier messages don't pin larger allocations on every thread that
+        // sent one.
         w.println("    private static final int SPARE_ARRAY_MAX = 4 * 1024 * 1024;");
         w.println("    private static final ThreadLocal<byte[]> SPARE_ARRAY = new ThreadLocal<>();\n");
 
@@ -167,11 +168,14 @@ public class LightProtoService {
         w.println();
         // The array is reused only once its stream is closed, so a stream that outlives the
         // next stream() call (in-process transport, or queued while the channel connects)
-        // keeps its bytes. A closed stream reads as empty.
+        // keeps its bytes. A stream closed before it was read to the end keeps them too, as
+        // someone else may still read it: a proxy that forwards the stream it received closes
+        // it once the in-process transport has taken it, and the peer reads it later. Only a
+        // stream closed after it was read hands its array back, and then reads as empty.
         w.println("        @Override");
         w.println("        public void close() {");
         w.println("            byte[] a = this.buf;");
-        w.println("            if (a.length == 0) {");
+        w.println("            if (a.length == 0 || this.pos < this.count) {");
         w.println("                return;");
         w.println("            }");
         w.println("            this.buf = CLOSED;");
@@ -188,13 +192,17 @@ public class LightProtoService {
         // stream reads its pieces in order, the array up to region 0, region 0, the array up
         // to region 1, and so on. Each region's buffer stays retained until close(), so the
         // caller may release it once stream() returns, but must not change its contents.
+        // A stream closed before it was read to the end copies what is left into an array of
+        // its own, then releases the buffers: as with DrainableByteArrayInputStream, someone
+        // else may still read it. That reader may be on another thread while the close runs,
+        // so the methods are synchronized.
         w.println("    private static final class GatheringInputStream extends java.io.InputStream");
         w.println("            implements io.grpc.Drainable, io.grpc.KnownLength {");
         w.println("        private static final byte[] CLOSED = new byte[0];");
         w.println();
         w.println("        private byte[] buf;");
-        w.println("        private final int length;");
-        w.println("        private final int count;");
+        w.println("        private int length;");
+        w.println("        private int count;");
         w.println("        private final int[] pos;");
         w.println("        private final io.netty.buffer.ByteBuf[] bufs;");
         w.println("        private final byte[][] arrays;");
@@ -242,12 +250,12 @@ public class LightProtoService {
         w.println("        }");
         w.println();
         w.println("        @Override");
-        w.println("        public int available() {");
+        w.println("        public synchronized int available() {");
         w.println("            return remaining;");
         w.println("        }");
         w.println();
         w.println("        @Override");
-        w.println("        public int read() {");
+        w.println("        public synchronized int read() {");
         w.println("            while (remaining > 0) {");
         w.println("                if (offset < pieceLength()) {");
         w.println("                    remaining--;");
@@ -260,7 +268,7 @@ public class LightProtoService {
         w.println("        }");
         w.println();
         w.println("        @Override");
-        w.println("        public int read(byte[] b, int off, int n) {");
+        w.println("        public synchronized int read(byte[] b, int off, int n) {");
         w.println("            java.util.Objects.checkFromIndexSize(off, n, b.length);");
         w.println("            if (n == 0) {");
         w.println("                return 0;");
@@ -285,7 +293,7 @@ public class LightProtoService {
         w.println("        }");
         w.println();
         w.println("        @Override");
-        w.println("        public int drainTo(java.io.OutputStream target) throws java.io.IOException {");
+        w.println("        public synchronized int drainTo(java.io.OutputStream target) throws java.io.IOException {");
         w.println("            int total = 0;");
         w.println("            while (remaining > 0) {");
         w.println("                int c = pieceLength() - offset;");
@@ -301,13 +309,22 @@ public class LightProtoService {
         w.println("        }");
         w.println();
         w.println("        @Override");
-        w.println("        public void close() {");
+        w.println("        public synchronized void close() {");
         w.println("            byte[] a = this.buf;");
-        w.println("            if (a.length == 0) {");
+        // Already handed back, or closed early again after the copy, which holds no buffers
+        w.println("            if (a.length == 0 || (remaining > 0 && count == 0)) {");
         w.println("                return;");
         w.println("            }");
-        w.println("            this.buf = CLOSED;");
-        w.println("            this.remaining = 0;");
+        w.println("            if (remaining == 0) {");
+        w.println("                this.buf = CLOSED;");
+        w.println("            } else {");
+        // The copy is read as the array before region 0 of a stream without regions
+        w.println("                byte[] rest = new byte[remaining];");
+        w.println("                read(rest, 0, rest.length);");
+        w.println("                this.buf = rest;");
+        w.println("                this.length = this.remaining = rest.length;");
+        w.println("                this.piece = this.offset = 0;");
+        w.println("            }");
         w.println("            for (int k = 0; k < count; k++) {");
         w.println("                if (bufs[k] != null) {");
         w.println("                    bufs[k].release();");
@@ -315,6 +332,7 @@ public class LightProtoService {
         w.println("                bufs[k] = null;");
         w.println("                arrays[k] = null;");
         w.println("            }");
+        w.println("            this.count = 0;");
         w.println("            if (a.length <= SPARE_ARRAY_MAX) {");
         w.println("                SPARE_ARRAY.set(a);");
         w.println("            }");

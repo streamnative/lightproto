@@ -157,16 +157,19 @@ public class GrpcMarshallerGatherTest {
     @Test
     void testCloseWithoutDrainReleasesTheBuffers() throws Exception {
         ByteBuf data = Unpooled.buffer(LARGE).writeBytes(random(LARGE, 1));
-        InputStream stream = MARSHALLER.stream(new GrpcPayload().setData(data));
+        GrpcPayload msg = new GrpcPayload().setData(data);
+        byte[] expected = msg.toByteArray();
+        InputStream stream = MARSHALLER.stream(msg);
         assertEquals(2, data.refCnt());
 
+        // Someone else may still read the stream (see GrpcMarshallerEarlyCloseTest): it copies
+        // what is left before releasing the buffers
         stream.close();
         assertEquals(1, data.refCnt());
-        assertEquals(0, stream.available());
-        assertEquals(-1, stream.read());
-        assertEquals(0, stream.readAllBytes().length);
-        assertEquals(0, ((Drainable) stream).drainTo(new ByteArrayOutputStream()));
-        stream.close();
+        assertEquals(expected.length, stream.available());
+        RecordingOutputStream out = drainAndClose(stream);
+        assertArrayEquals(expected, out.toByteArray());
+        assertFalse(out.wrote(data.array()));
         assertEquals(1, data.refCnt());
     }
 

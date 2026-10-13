@@ -36,9 +36,9 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * Verifies that the gRPC marshaller returns a leak-proof, Drainable stream.
  * The marshaller serializes into a byte[]-backed DrainableByteArrayInputStream. Closing
- * the stream hands its array to the closing thread, which serializes its next message
- * into it. The array is not ref-counted, so a stream that gRPC drops without closing only
- * leaves it to the garbage collector. (Large heap bytes values are written from their own
+ * the stream once it has been read hands its array to the closing thread, which serializes
+ * its next message into it. The array is not ref-counted, so a stream that gRPC drops without
+ * closing only leaves it to the garbage collector. (Large heap bytes values are written from their own
  * buffers, which the stream retains: see GrpcMarshallerGatherTest.)
  */
 public class GrpcMarshallerBufferLeakTest {
@@ -149,40 +149,41 @@ public class GrpcMarshallerBufferLeakTest {
         assertArrayEquals(next.toByteArray(), out.toByteArray());
     }
 
-    @ParameterizedTest
-    @ValueSource(ints = {100, 128 * 1024})
-    void testArrayIsReusedAfterCloseWithoutDrain(int payloadSize) throws Exception {
-        byte[] array = drainAndClose(MARSHALLER.stream(request("msg-0", payloadSize))).array;
+    @Test
+    void testArrayIsReusedOnlyOnceTheStreamClosedBeforeReadIsRead() throws Exception {
+        // Someone else may still read a stream closed before it was read to the end (see
+        // GrpcMarshallerEarlyCloseTest), so its array stays with it until it is read and closed
+        byte[] array = drainAndClose(MARSHALLER.stream(request("msg-0", 100))).array;
 
-        InputStream stream = MARSHALLER.stream(request("msg-1", payloadSize));
+        GrpcRequest early = request("msg-1", 100);
+        InputStream stream = MARSHALLER.stream(early);
         stream.close();
-        assertEquals(0, stream.available());
-        assertEquals(-1, stream.read());
-        assertEquals(0, stream.readAllBytes().length);
-        assertEquals(0, ((Drainable) stream).drainTo(new ByteArrayOutputStream()));
 
-        GrpcRequest next = request("msg-2", payloadSize);
-        RecordingOutputStream out = drainAndClose(MARSHALLER.stream(next));
-        assertSame(array, out.array);
-        assertArrayEquals(next.toByteArray(), out.toByteArray());
+        GrpcRequest next = request("msg-2", 100);
+        RecordingOutputStream nextOut = drainAndClose(MARSHALLER.stream(next));
+        assertNotSame(array, nextOut.array);
+        assertArrayEquals(next.toByteArray(), nextOut.toByteArray());
+
+        RecordingOutputStream earlyOut = drainAndClose(stream);
+        assertSame(array, earlyOut.array);
+        assertArrayEquals(early.toByteArray(), earlyOut.toByteArray());
+        assertSame(array, drainAndClose(MARSHALLER.stream(request("msg-3", 100))).array);
     }
 
     @ParameterizedTest
     @ValueSource(ints = {100, 128 * 1024})
-    void testArrayIsReusedAfterFailedDrain(int payloadSize) throws Exception {
-        byte[] array = drainAndClose(MARSHALLER.stream(request("msg-0", payloadSize))).array;
-
-        InputStream stream = MARSHALLER.stream(request("msg-1", payloadSize));
+    void testFailedDrainKeepsTheBytes(int payloadSize) throws Exception {
+        GrpcRequest request = request("msg-1", payloadSize);
+        InputStream stream = MARSHALLER.stream(request);
         FailingOutputStream target = new FailingOutputStream();
         assertThrows(IOException.class, () -> ((Drainable) stream).drainTo(target));
-        assertSame(array, target.array);
-        // gRPC closes the stream whether or not writing it succeeded
+        // gRPC closes the stream whether or not writing it succeeded. The stream was not read,
+        // so it can't tell this close from one that someone else reads after
         stream.close();
 
         GrpcRequest next = request("msg-2", payloadSize);
-        RecordingOutputStream out = drainAndClose(MARSHALLER.stream(next));
-        assertSame(array, out.array);
-        assertArrayEquals(next.toByteArray(), out.toByteArray());
+        assertArrayEquals(next.toByteArray(), drainAndClose(MARSHALLER.stream(next)).toByteArray());
+        assertArrayEquals(request.toByteArray(), drainAndClose(stream).toByteArray());
     }
 
     @ParameterizedTest
@@ -280,8 +281,6 @@ public class GrpcMarshallerBufferLeakTest {
     }
 
     private static final class FailingOutputStream extends OutputStream {
-        byte[] array;
-
         @Override
         public void write(int b) throws IOException {
             throw new IOException("write failed");
@@ -289,7 +288,6 @@ public class GrpcMarshallerBufferLeakTest {
 
         @Override
         public void write(byte[] b, int off, int len) throws IOException {
-            array = b;
             throw new IOException("write failed");
         }
     }
