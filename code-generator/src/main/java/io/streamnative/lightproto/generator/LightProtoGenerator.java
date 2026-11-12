@@ -65,6 +65,22 @@ public class LightProtoGenerator {
                                       List<String> fileNames,
                                       boolean generateTextFormat,
                                       boolean generateJson) throws Exception {
+        return generate(descriptors, outputDirectory, classPrefix, useOuterClass, fileNames, generateTextFormat,
+                generateJson, null);
+    }
+
+    /**
+     * When {@code stringDecoder} is set to a fully qualified class name, the generated messages decode
+     * their lazy string fields with its
+     * {@code public static String decode(io.netty.buffer.ByteBuf buffer, int index, int length)} method
+     * instead of the built-in UTF-8 decoder.
+     */
+    public static List<File> generate(List<ProtoFileDescriptor> descriptors, File outputDirectory,
+                                      String classPrefix, boolean useOuterClass,
+                                      List<String> fileNames,
+                                      boolean generateTextFormat,
+                                      boolean generateJson,
+                                      String stringDecoder) throws Exception {
         List<File> generatedFiles = new ArrayList<>();
         Set<String> javaPackages = new HashSet<>();
 
@@ -119,6 +135,12 @@ public class LightProtoGenerator {
             try (InputStream is = LightProtoGenerator.class.getResourceAsStream("/io/streamnative/lightproto/generator/LightProtoCodec.java")) {
                 JavaClassSource codecClass = (JavaClassSource) Roaster.parse(is);
                 codecClass.setPackage(javaPackage);
+                if (stringDecoder != null && !stringDecoder.isEmpty()) {
+                    // Every lazy string decode from a parsed buffer goes through readString(),
+                    // so replacing its body routes all of them to the user's decoder.
+                    codecClass.getMethod("readString", "ByteBuf", "int", "int")
+                            .setBody("return " + stringDecoder + ".decode(b, index, len);");
+                }
 
                 String javaDir = String.join("/", javaPackage.split("\\."));
                 Path codecFile = Paths.get(String.format("%s/%s/LightProtoCodec.java", outputDirectory, javaDir));

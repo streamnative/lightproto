@@ -26,6 +26,7 @@ import org.gradle.api.file.ConfigurableFileCollection;
 import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.tasks.*;
+import org.gradle.api.tasks.Optional;
 import org.gradle.work.NormalizeLineEndings;
 
 import java.io.*;
@@ -51,6 +52,10 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
 
     @Input
     public abstract Property<Boolean> getGenerateJson();
+
+    @Input
+    @Optional
+    public abstract Property<String> getStringDecoder();
 
     @Input
     public abstract Property<String> getProtocVersion();
@@ -151,7 +156,7 @@ public abstract class GenerateLightProtoTask extends DefaultTask {
 
             LightProtoGenerator.generate(descriptors, outputDir, getClassPrefix().get(),
                     getSingleOuterClass().get(), fileNames, getGenerateTextFormat().get(),
-                    getGenerateJson().get());
+                    getGenerateJson().get(), getStringDecoder().getOrNull());
         } catch (GradleException e) {
             throw e;
         } catch (Exception e) {

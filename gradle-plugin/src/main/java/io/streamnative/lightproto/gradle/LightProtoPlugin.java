@@ -55,6 +55,7 @@ public class LightProtoPlugin implements Plugin<Project> {
                     task.getSingleOuterClass().set(extension.getSingleOuterClass());
                     task.getGenerateTextFormat().set(extension.getGenerateTextFormat());
                     task.getGenerateJson().set(extension.getGenerateJson());
+                    task.getStringDecoder().set(extension.getStringDecoder());
                     task.getProtocVersion().set(extension.getProtocVersion());
                     task.getProtocPath().set(extension.getProtocPath());
                     task.getExtraProtoPaths().from(extension.getExtraProtoPaths());
