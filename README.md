@@ -72,6 +72,7 @@ lightproto {
     classPrefix = ''           // prefix for generated class names
     singleOuterClass = false   // wrap all messages in a single outer class
     generateTextFormat = false // also generate protobuf TextFormat (de)serialization methods
+    // stringDecoder = 'com.example.StringInterner' // custom decoder for lazy string fields
     protocVersion = '4.34.0'   // protoc compiler version
     // protocPath = '/usr/local/bin/protoc'  // use a local protoc binary
 }
@@ -177,6 +178,51 @@ Differences from JSON: field names are the original proto snake_case, `int64` va
 quoted strings with C-style escapes. The parser tolerates `# … ` comments, single- or
 double-quoted strings, angle-bracket sub-messages (`field <…>`), `[v1, v2]` array syntax for
 repeated fields, and ignores unknown fields.
+
+### Custom string decoding (interning)
+
+A parsed message decodes a string field when its getter is first called. By default, each decode
+creates a new `String`. If an application reads the same values again and again (for example
+names, codes or keys), set the `stringDecoder` option so that your own code can return a cached
+instance. The value is the fully qualified name of a class with this method:
+
+```java
+public static String decode(io.netty.buffer.ByteBuf buffer, int index, int length)
+```
+
+```groovy
+lightproto {
+    stringDecoder = 'com.example.StringInterner'
+}
+```
+
+```xml
+<configuration>
+    <stringDecoder>com.example.StringInterner</stringDecoder>
+</configuration>
+```
+
+The generated messages then call `decode()` for each string that they read from a parsed buffer:
+singular and repeated string fields, map keys and values, `materialize()` and `copyFrom()`. JSON and
+TextFormat parsing do not use it. If the option is not set, the generated code does not change.
+
+The method must:
+
+- return a `String` equal to the UTF-8 decode of the `length` bytes at `index` in `buffer`;
+- read `buffer` only with absolute (index-based) methods, and not keep a reference to it, because
+  the buffer can be released or reused after the call;
+- be thread-safe if messages are parsed or read on more than one thread.
+
+The message keeps the result, so `decode()` is usually called once for each string value of a
+parse. Some paths can call it again for the same bytes, for example a getter and then
+`materialize()`.
+
+The cache policy (size, eviction, one cache per thread or one shared cache) is yours. Cache only
+values that repeat: a value that is unique to each message, such as a request ID, fills the cache
+and gives no gain. The method does not know the field, so use a property of the bytes (for example
+a maximum length) to decide what to cache. For a small example, see
+[`TestStringInterner`](tests/src/main/java/io/streamnative/lightproto/tests/TestStringInterner.java):
+a bounded table keyed by a hash of the bytes.
 
 ### gRPC Integration
 

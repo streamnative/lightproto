@@ -121,6 +121,20 @@
                             <goal>generate</goal>
                         </goals>
                     </execution>
+                    <!-- Messages that decode their lazy strings with a custom decoder -->
+                    <execution>
+                        <id>string-decoder</id>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${project.basedir}/src/main/proto-string-decoder/string_decoder.proto</source>
+                            </sources>
+                            <targetSourcesSubDir>generated-sources/lightproto-string-decoder</targetSourcesSubDir>
+                            <stringDecoder>io.streamnative.lightproto.tests.TestStringInterner</stringDecoder>
+                        </configuration>
+                    </execution>
                 </executions>
             </plugin>
             <!-- Re-run all tests with -XX:-CompactStrings to verify
